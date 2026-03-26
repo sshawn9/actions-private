@@ -1,81 +1,66 @@
+// Serve install-easytier.sh from private repo with shared config injection.
+// Usage: curl -fsSL https://iet.sshawn9.com | sudo sh -s <args>
+
 interface Env {
-  GITHUB_REPO: string;
-  GITHUB_BRANCH: string;
   GITHUB_TOKEN: string;
 }
 
+const REPO = "sshawn9/actions-private";
+const BRANCH = "main";
+const SCRIPT_PATH = "easytier-deployer/scripts/install-easytier.sh";
+const CONFIG_PATH = "shared/common-downloader-proxy.conf";
+
+async function fetchRaw(path: string, env: Env): Promise<string | null> {
+  const url = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${path}`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "iet-worker",
+      Authorization: `token ${env.GITHUB_TOKEN}`,
+    },
+  });
+  return res.ok ? await res.text() : null;
+}
+
+function applyConfig(script: string, config: string): string {
+  // Parse "KEY=value" lines from config
+  for (const line of config.split("\n")) {
+    const match = line.match(/^(\w+)=(.*)$/);
+    if (match) {
+      script = script.replaceAll(`{{${match[1]}}}`, match[2]);
+    }
+  }
+  return script;
+}
+
 export default {
-  async fetch(
-    request: Request,
-    env: Env,
-    ctx: ExecutionContext
-  ): Promise<Response> {
-    const url = new URL(request.url);
-    let path = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
-
-    // Root: return usage hint
-    if (!path) {
-      return new Response(
-        "Usage: curl -fsSL demo.sshawn.com/<script-name> | sh\n",
-        { headers: { "Content-Type": "text/plain; charset=utf-8" } }
-      );
-    }
-
-    // Normalize: add .sh if missing
-    if (!path.endsWith(".sh")) {
-      path += ".sh";
-    }
-
-    // Check Cloudflare cache first
-    const cacheKey = new Request(url.toString(), request);
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const cacheKey = new Request(new URL(request.url).origin);
     const cache = caches.default;
-    let response = await cache.match(cacheKey);
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
 
-    if (response) {
-      return response;
+    const [script, config] = await Promise.all([
+      fetchRaw(SCRIPT_PATH, env),
+      fetchRaw(CONFIG_PATH, env),
+    ]);
+
+    if (!script) {
+      return new Response("Failed to fetch script.\n", {
+        status: 502,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
     }
 
-    // Fetch from GitHub (private repo requires token)
-    const repo = env.GITHUB_REPO || "sshawn9/actions";
-    const branch = env.GITHUB_BRANCH || "main";
-    const githubUrl = `https://raw.githubusercontent.com/${repo}/${branch}/scripts/${path}`;
+    const body = config ? applyConfig(script, config) : script;
 
-    const ghResponse = await fetch(githubUrl, {
-      headers: {
-        "User-Agent": "sh-sshawn-worker",
-        Authorization: `token ${env.GITHUB_TOKEN}`,
-      },
-    });
-
-    if (!ghResponse.ok) {
-      if (ghResponse.status === 404) {
-        return new Response(`Script not found: ${path}\n`, {
-          status: 404,
-          headers: { "Content-Type": "text/plain; charset=utf-8" },
-        });
-      }
-      return new Response(
-        `Failed to fetch script: ${ghResponse.statusText}\n`,
-        {
-          status: 502,
-          headers: { "Content-Type": "text/plain; charset=utf-8" },
-        }
-      );
-    }
-
-    const scriptBody = await ghResponse.text();
-
-    // Build cacheable response
-    response = new Response(scriptBody, {
+    const response = new Response(body, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "s-maxage=300",
       },
     });
 
-    // Store in Cloudflare edge cache (non-blocking)
     ctx.waitUntil(cache.put(cacheKey, response.clone()));
-
     return response;
   },
 };

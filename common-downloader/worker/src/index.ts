@@ -1,6 +1,6 @@
 // General download proxy with domain whitelist + token auth.
 // Usage: curl -fsSL "https://dl.sshawn9.com/github.com/owner/repo/releases/download/tag/file?token=xxx"
-import { DL_TOKEN, ALLOWED_DOMAINS, GITHUB_DOMAINS } from "./config";
+import { DL_TOKENS, ALLOWED_DOMAINS, GITHUB_DOMAINS } from "./config";
 
 interface Env {
   GITHUB_TOKEN?: string;
@@ -32,7 +32,7 @@ export default {
       );
     }
 
-    if (token !== DL_TOKEN) {
+    if (!token || !DL_TOKENS.includes(token)) {
       return new Response("Unauthorized.\n", { status: 403 });
     }
 

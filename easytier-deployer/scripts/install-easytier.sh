@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly INSTALL_DIR="/usr/local/bin"
+readonly INSTALL_DIR="/usr/bin"
 readonly SERVICE_NAME="easytier"
 readonly SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 readonly WEB_ADDR=""  # TODO: fill in web management address
 
-declare -A DOWNLOAD_URLS=(
-  [x86_64]=""   # TODO: fill in
-  [aarch64]=""  # TODO: fill in
-  [armv7l]=""   # TODO: fill in
-)
+readonly GITHUB_REPO="EasyTier/EasyTier"
+readonly DL_PROXY="{{DL_PROXY}}"
+readonly DL_TOKEN="{{DL_TOKEN}}"
 
 log()  { printf '[INFO]  %s\n' "$*"; }
 err()  { printf '[ERROR] %s\n' "$*" >&2; }
@@ -25,13 +23,45 @@ parse_args() {
   readonly MACHINE_ID="$1"
 }
 
-get_download_url() {
+# Resolve latest version, download with proxy-first + direct fallback (each tried twice)
+download_easytier() {
   local arch
   arch=$(uname -m)
-  [[ -v DOWNLOAD_URLS[$arch] ]] || die "Unsupported architecture: $arch"
-  readonly DOWNLOAD_URL="${DOWNLOAD_URLS[$arch]}"
-  [[ -n "$DOWNLOAD_URL" ]] || die "Download URL not configured for $arch"
-  log "Architecture: $arch"
+  case "$arch" in
+    x86_64|aarch64) ;;
+    *) die "Unsupported architecture: $arch" ;;
+  esac
+
+  local latest_url
+  latest_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${GITHUB_REPO}/releases/latest")
+  local version="${latest_url##*/}"
+  [[ -n "$version" ]] || die "Failed to detect latest version"
+  log "Architecture: $arch, Version: $version"
+
+  local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/easytier-linux-${arch}-${version}.zip"
+  local proxy_url="${DL_PROXY}/${url#https://}?token=${DL_TOKEN}"
+  local output="$1"
+
+  local src attempt
+  for src in "proxy:$proxy_url" "direct:$url"; do
+    local label="${src%%:*}" target="${src#*:}"
+    for attempt in 1 2; do
+      log "Downloading ($label, attempt $attempt) ..."
+      if curl -fsSL --connect-timeout 10 "$target" -o "$output"; then
+        return 0
+      fi
+      err "$label attempt $attempt failed"
+    done
+  done
+
+  die "All download attempts failed"
+}
+
+stop_existing() {
+  if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+    log "Stopping existing $SERVICE_NAME service ..."
+    systemctl stop "$SERVICE_NAME"
+  fi
 }
 
 install_binary() {
@@ -39,13 +69,15 @@ install_binary() {
   tmp_dir=$(mktemp -d)
   trap 'rm -rf "$tmp_dir"' EXIT
 
-  log "Downloading easytier ..."
-  curl -fsSL "$DOWNLOAD_URL" -o "$tmp_dir/easytier.tar.gz"
-  tar -xzf "$tmp_dir/easytier.tar.gz" -C "$tmp_dir"
+  download_easytier "$tmp_dir/easytier.zip"
+  unzip -q "$tmp_dir/easytier.zip" -d "$tmp_dir"
 
   local bin
   for bin in easytier-core easytier-cli; do
-    install -m 755 "$tmp_dir/$bin" "$INSTALL_DIR/$bin"
+    local found
+    found=$(find "$tmp_dir" -name "$bin" -type f | head -1)
+    [[ -n "$found" ]] || die "$bin not found in archive"
+    install -m 755 "$found" "$INSTALL_DIR/$bin"
   done
 
   log "Installed to $INSTALL_DIR"
@@ -56,17 +88,20 @@ setup_service() {
 
   cat > "$SERVICE_FILE" <<-EOF
 	[Unit]
-	Description=EasyTier VPN Service
-	After=network.target
+	Description=A full meshed p2p VPN, connecting all your devices in one network with one command.
+	After=network.target syslog.target
+	StartLimitIntervalSec=0
 
 	[Service]
 	Type=simple
+	WorkingDirectory=/tmp
 	ExecStart=${INSTALL_DIR}/easytier-core \\
 	    --hostname ${MACHINE_ID} \\
 	    --instance-id ${MACHINE_ID} \\
-	    --web-client-url ${WEB_ADDR}
-	Restart=on-failure
-	RestartSec=5
+	    -w ${WEB_ADDR}
+	Restart=always
+	RestartSec=1
+	LimitNOFILE=infinity
 
 	[Install]
 	WantedBy=multi-user.target
@@ -80,7 +115,7 @@ setup_service() {
 main() {
   check_root
   parse_args "$@"
-  get_download_url
+  stop_existing
   install_binary
   setup_service
 }
