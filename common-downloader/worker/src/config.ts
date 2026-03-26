@@ -1,6 +1,6 @@
 // ---- Edit this file to manage your proxy settings ----
 
-export const DL_TOKEN = "CHANGE_ME"; // TODO: set your token
+export const DL_TOKEN = "tmp339"; // TODO: set your token
 
 export const ALLOWED_DOMAINS: string[] = [
   "github.com",

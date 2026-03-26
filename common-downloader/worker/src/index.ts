@@ -1,5 +1,5 @@
 // General download proxy with domain whitelist + token auth.
-// Usage: curl -fsSL https://dl.sshawn.com/<token>/github.com/owner/repo/releases/download/tag/file.tar.gz
+// Usage: curl -fsSL "https://dl.sshawn9.com/github.com/owner/repo/releases/download/tag/file?token=xxx"
 import { DL_TOKEN, ALLOWED_DOMAINS } from "./config";
 
 function isAllowed(hostname: string): boolean {
@@ -10,29 +10,20 @@ function isAllowed(hostname: string): boolean {
 
 export default {
   async fetch(request: Request, _env: unknown, ctx: ExecutionContext): Promise<Response> {
-    const raw = new URL(request.url).pathname.replace(/^\/+/, "").replace(/\/+$/, "");
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
+    const token = url.searchParams.get("token");
+    const noCache = url.searchParams.has("nocache");
 
-    if (!raw) {
-      return new Response("Usage: curl -fsSL dl.sshawn.com/<token>/<domain>/<path>\n", {
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-      });
+    if (!path) {
+      return new Response(
+        "Usage: curl -fsSL \"dl.sshawn9.com/<domain>/<path>?token=xxx\"\n",
+        { headers: { "Content-Type": "text/plain; charset=utf-8" } }
+      );
     }
-
-    // First path segment is the token
-    const slashIdx = raw.indexOf("/");
-    if (slashIdx === -1) {
-      return new Response("Unauthorized.\n", { status: 403 });
-    }
-
-    const token = raw.slice(0, slashIdx);
-    const path = raw.slice(slashIdx + 1);
 
     if (token !== DL_TOKEN) {
       return new Response("Unauthorized.\n", { status: 403 });
-    }
-
-    if (!path) {
-      return new Response("Missing download path.\n", { status: 400 });
     }
 
     // Extract hostname from path
@@ -57,8 +48,10 @@ export default {
     // Check Cloudflare edge cache
     const cacheKey = new Request(targetUrl);
     const cache = caches.default;
-    const cached = await cache.match(cacheKey);
-    if (cached) return cached;
+    if (!noCache) {
+      const cached = await cache.match(cacheKey);
+      if (cached) return cached;
+    }
 
     const upstream = await fetch(targetUrl, {
       headers: { "User-Agent": "dl-proxy" },
