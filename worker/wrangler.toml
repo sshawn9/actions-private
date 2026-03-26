@@ -1,0 +1,11 @@
+name = "sh-sshawn"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+
+[vars]
+GITHUB_REPO = "sshawn9/actions"
+GITHUB_BRANCH = "main"
+
+routes = [
+  { pattern = "demo.sshawn.com/*", zone_name = "sshawn.com" }
+]

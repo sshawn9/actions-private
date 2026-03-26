@@ -1,0 +1,7 @@
+name = "common-downloader"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+
+routes = [
+  { pattern = "dl.sshawn.com/*", zone_name = "sshawn.com" }
+]
