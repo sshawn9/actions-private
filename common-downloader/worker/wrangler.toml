@@ -3,5 +3,5 @@ main = "src/index.ts"
 compatibility_date = "2025-04-01"
 
 routes = [
-  { pattern = "dl.sshawn9.com/*", zone_name = "sshawn9.com" }
+  { pattern = "dl.sshawn9.com", custom_domain = true }
 ]
