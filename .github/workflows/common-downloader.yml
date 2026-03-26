@@ -22,6 +22,26 @@ jobs:
 
       - run: npm install
 
+      - name: Debug token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_WORKERS_TOKEN }}
+        run: |
+          echo "Token length: ${#CLOUDFLARE_API_TOKEN}"
+          echo "Token first 4: ${CLOUDFLARE_API_TOKEN:0:4}"
+          echo "Token last 4: ${CLOUDFLARE_API_TOKEN: -4}"
+          # Check for whitespace/newline
+          if [[ "$CLOUDFLARE_API_TOKEN" =~ ^[[:space:]] ]]; then echo "WARNING: leading whitespace"; fi
+          if [[ "$CLOUDFLARE_API_TOKEN" =~ [[:space:]]$ ]]; then echo "WARNING: trailing whitespace"; fi
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then echo "ERROR: token is empty"; fi
+
+      - name: Verify token with CF API
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_WORKERS_TOKEN }}
+        run: |
+          curl -s -o /dev/null -w "HTTP status: %{http_code}\n" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/user/tokens/verify"
+
       - run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_WORKERS_TOKEN }}
