@@ -1,6 +1,10 @@
 // General download proxy with domain whitelist + token auth.
 // Usage: curl -fsSL "https://dl.sshawn9.com/github.com/owner/repo/releases/download/tag/file?token=xxx"
-import { DL_TOKEN, ALLOWED_DOMAINS } from "./config";
+import { DL_TOKEN, ALLOWED_DOMAINS, GITHUB_DOMAINS } from "./config";
+
+interface Env {
+  GITHUB_TOKEN?: string;
+}
 
 function isAllowed(hostname: string): boolean {
   return ALLOWED_DOMAINS.some(
@@ -8,8 +12,14 @@ function isAllowed(hostname: string): boolean {
   );
 }
 
+function isGitHub(hostname: string): boolean {
+  return GITHUB_DOMAINS.some(
+    (d) => hostname === d || hostname.endsWith(`.${d}`)
+  );
+}
+
 export default {
-  async fetch(request: Request, _env: unknown, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
     const token = url.searchParams.get("token");
@@ -53,10 +63,12 @@ export default {
       if (cached) return cached;
     }
 
-    const upstream = await fetch(targetUrl, {
-      headers: { "User-Agent": "dl-proxy" },
-      redirect: "follow",
-    });
+    const headers: Record<string, string> = { "User-Agent": "dl-proxy" };
+    if (env.GITHUB_TOKEN && isGitHub(hostname)) {
+      headers["Authorization"] = `token ${env.GITHUB_TOKEN}`;
+    }
+
+    const upstream = await fetch(targetUrl, { headers, redirect: "follow" });
 
     if (!upstream.ok) {
       return new Response(`Download failed: ${upstream.status} ${upstream.statusText}\n`, {
