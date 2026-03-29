@@ -1,4 +1,4 @@
-# Common Downloader
+# dl-proxy
 
 Cloudflare Worker proxy for downloading resources from GitHub and other domains that may be inaccessible in certain regions.
 
@@ -51,12 +51,12 @@ Current whitelist:
 
 ## Deployment
 
-Push changes under `common-downloader/worker/` to main branch triggers GitHub Actions automatically. Can also be triggered manually from the Actions page.
+Push changes under `dl-proxy/worker/` to main branch triggers GitHub Actions automatically. Can also be triggered manually from the Actions page.
 
 Manual deploy:
 
 ```bash
-cd common-downloader/worker
+cd dl-proxy/worker
 npm install
 npx wrangler deploy
 ```

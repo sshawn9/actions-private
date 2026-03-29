@@ -1,18 +1,18 @@
-name: Deploy Common Downloader
+name: Deploy DL Proxy
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - "common-downloader/worker/**"
+      - "dl-proxy/worker/**"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: common-downloader/worker
+        working-directory: dl-proxy/worker
     steps:
       - uses: actions/checkout@v6
 
