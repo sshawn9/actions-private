@@ -1,5 +1,6 @@
 // Subdomain-based file server with declarative route mapping.
 // All subdomain-to-file mappings must be declared in routes.json.
+// Config values from shared/*.conf are injected into {{KEY}} placeholders.
 // Usage: curl -fsSL https://<name>.sshawn9.com
 
 interface Env {
@@ -10,6 +11,7 @@ const REPO = "sshawn9/actions-private";
 const BRANCH = "main";
 const FILES_DIR = "file-server/files";
 const ROUTES_PATH = "file-server/routes.json";
+const CONFIGS_DIR = "shared";
 
 async function fetchRaw(path: string, env: Env): Promise<string | null> {
   const url = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${path}`;
@@ -20,6 +22,41 @@ async function fetchRaw(path: string, env: Env): Promise<string | null> {
     },
   });
   return res.ok ? await res.text() : null;
+}
+
+function applyConfig(content: string, config: string): string {
+  for (const line of config.split("\n")) {
+    const match = line.match(/^(\w+)=(.*)$/);
+    if (match) {
+      content = content.replaceAll(`{{${match[1]}}}`, match[2]);
+    }
+  }
+  return content;
+}
+
+async function listDir(dir: string, env: Env): Promise<string[]> {
+  const url = `https://api.github.com/repos/${REPO}/contents/${dir}?ref=${BRANCH}`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "file-server",
+      Authorization: `token ${env.GITHUB_TOKEN}`,
+      Accept: "application/vnd.github.v3+json",
+    },
+  });
+  if (!res.ok) return [];
+  const items: { name: string }[] = await res.json();
+  return items.map((i) => i.name);
+}
+
+async function loadConfigs(env: Env): Promise<string[]> {
+  const files = await listDir(CONFIGS_DIR, env);
+  const configs: string[] = [];
+
+  for (const file of files.filter((f) => f.endsWith(".conf"))) {
+    const raw = await fetchRaw(`${CONFIGS_DIR}/${file}`, env);
+    if (raw) configs.push(raw);
+  }
+  return configs;
 }
 
 export default {
@@ -54,10 +91,15 @@ export default {
       return new Response(`Not found: ${subdomain}\n`, { status: 404 });
     }
 
-    const file = await fetchRaw(`${FILES_DIR}/${routes[subdomain]}`, env);
+    let file = await fetchRaw(`${FILES_DIR}/${routes[subdomain]}`, env);
 
     if (!file) {
       return new Response(`File not found: ${routes[subdomain]}\n`, { status: 404 });
+    }
+
+    const configs = await loadConfigs(env);
+    for (const config of configs) {
+      file = applyConfig(file, config);
     }
 
     const response = new Response(file, {
