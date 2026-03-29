@@ -1,8 +1,8 @@
-name = "script-server"
+name = "file-server"
 main = "src/index.ts"
 compatibility_date = "2025-04-01"
 
 routes = [
-  { pattern = "iet.sshawn9.com", custom_domain = true }
+  { pattern = "iet.sshawn9.com", custom_domain = true },
   { pattern = "deploy-easytier-web.sshawn9.com", custom_domain = true }
 ]

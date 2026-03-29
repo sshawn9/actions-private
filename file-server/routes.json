@@ -1,0 +1,4 @@
+{
+  "iet": "scripts/install-easytier.sh",
+  "deploy-easytier-web": "scripts/deploy-easytier-web.sh"
+}

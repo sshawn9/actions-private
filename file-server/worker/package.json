@@ -1,5 +1,5 @@
 {
-  "name": "script-server",
+  "name": "file-server",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",

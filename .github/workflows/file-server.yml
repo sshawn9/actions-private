@@ -1,18 +1,18 @@
-name: Deploy Script Server
+name: Deploy File Server
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - "script-server/worker/**"
+      - "file-server/worker/**"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: script-server/worker
+        working-directory: file-server/worker
     steps:
       - uses: actions/checkout@v6
 

@@ -1,5 +1,6 @@
-// Generic script server: serves scripts from script-server/scripts/<subdomain>.sh
-// Usage: curl -fsSL https://<script-name>.sshawn9.com | sudo sh -s <args>
+// Subdomain-based file server with declarative route mapping and config injection.
+// All subdomain-to-file mappings must be declared in routes.json.
+// Usage: curl -fsSL https://<name>.sshawn9.com
 
 interface Env {
   GITHUB_TOKEN: string;
@@ -7,28 +8,29 @@ interface Env {
 
 const REPO = "sshawn9/actions-private";
 const BRANCH = "main";
-const SCRIPTS_DIR = "script-server/scripts";
+const FILES_DIR = "file-server/files";
+const ROUTES_PATH = "file-server/routes.json";
 const CONFIG_PATH = "shared/common-downloader-proxy.conf";
 
 async function fetchRaw(path: string, env: Env): Promise<string | null> {
   const url = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${path}`;
   const res = await fetch(url, {
     headers: {
-      "User-Agent": "script-server",
+      "User-Agent": "file-server",
       Authorization: `token ${env.GITHUB_TOKEN}`,
     },
   });
   return res.ok ? await res.text() : null;
 }
 
-function applyConfig(script: string, config: string): string {
+function applyConfig(content: string, config: string): string {
   for (const line of config.split("\n")) {
     const match = line.match(/^(\w+)=(.*)$/);
     if (match) {
-      script = script.replaceAll(`{{${match[1]}}}`, match[2]);
+      content = content.replaceAll(`{{${match[1]}}}`, match[2]);
     }
   }
-  return script;
+  return content;
 }
 
 export default {
@@ -36,7 +38,6 @@ export default {
     const url = new URL(request.url);
     const hostname = url.hostname;
 
-    // Extract subdomain: "iet.sshawn9.com" → "iet"
     const parts = hostname.split(".");
     if (parts.length < 3) {
       return new Response("Invalid request.\n", { status: 400 });
@@ -44,7 +45,7 @@ export default {
     const subdomain = parts.slice(0, -2).join(".").toLowerCase();
 
     if (!subdomain || subdomain === "www") {
-      return new Response("No script specified.\n", { status: 400 });
+      return new Response("No file specified.\n", { status: 400 });
     }
 
     const cacheKey = new Request(url.origin);
@@ -52,21 +53,28 @@ export default {
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
 
-    const scriptPath = `${SCRIPTS_DIR}/${subdomain}.sh`;
-
-    const [script, config] = await Promise.all([
-      fetchRaw(scriptPath, env),
+    const [routesRaw, config] = await Promise.all([
+      fetchRaw(ROUTES_PATH, env),
       fetchRaw(CONFIG_PATH, env),
     ]);
 
-    if (!script) {
-      return new Response(`Script not found: ${subdomain}\n`, {
-        status: 404,
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-      });
+    if (!routesRaw) {
+      return new Response("Failed to load routes.\n", { status: 502 });
     }
 
-    const body = config ? applyConfig(script, config) : script;
+    const routes: Record<string, string> = JSON.parse(routesRaw);
+
+    if (!(subdomain in routes)) {
+      return new Response(`Not found: ${subdomain}\n`, { status: 404 });
+    }
+
+    const file = await fetchRaw(`${FILES_DIR}/${routes[subdomain]}`, env);
+
+    if (!file) {
+      return new Response(`File not found: ${routes[subdomain]}\n`, { status: 404 });
+    }
+
+    const body = config ? applyConfig(file, config) : file;
 
     const response = new Response(body, {
       headers: {
