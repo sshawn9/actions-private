@@ -4,7 +4,7 @@ set -euo pipefail
 readonly INSTALL_DIR="/usr/bin"
 readonly SERVICE_NAME="easytier"
 readonly SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-readonly WEB_ADDR="wss://et-config.sshawn9.com/admin"  # TODO: fill in web management address
+readonly WEB_ADDR="wss://et-config.sshawn9.com:0/admin"
 
 readonly GITHUB_REPO="EasyTier/EasyTier"
 readonly DL_PROXY="{{DL_PROXY}}"
