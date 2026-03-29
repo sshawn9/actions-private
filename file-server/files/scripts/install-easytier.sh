@@ -107,7 +107,7 @@ setup_service() {
 	WorkingDirectory=/tmp
 	ExecStart=${INSTALL_DIR}/easytier-core \\
 	    --hostname ${MACHINE_ID} \\
-	    --instance-id ${MACHINE_ID} \\
+	    --machine-id ${MACHINE_ID} \\
 	    -w ${WEB_ADDR}
 	Restart=always
 	RestartSec=1
