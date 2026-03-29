@@ -50,12 +50,18 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 # ======================== Preflight ========================
 
 check_root() {
-    [[ $EUID -ne 0 ]] && error "Root required: sudo bash $0"
+    if [[ $EUID -ne 0 ]]; then
+        error "Root required: sudo bash $0"
+    fi
 }
 
 check_config() {
-    [[ "$WEB_DOMAIN" == *"example.com"* ]] && error "Set WEB_DOMAIN before running"
-    [[ "$CONFIG_DOMAIN" == *"example.com"* ]] && error "Set CONFIG_DOMAIN before running"
+    if [[ "$WEB_DOMAIN" == *"example.com"* ]]; then
+        error "Set WEB_DOMAIN before running"
+    fi
+    if [[ "$CONFIG_DOMAIN" == *"example.com"* ]]; then
+        error "Set CONFIG_DOMAIN before running"
+    fi
 }
 
 install_dependencies() {

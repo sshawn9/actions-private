@@ -15,11 +15,15 @@ err()  { printf '[ERROR] %s\n' "$*" >&2; }
 die()  { err "$@"; exit 1; }
 
 check_root() {
-  (( EUID == 0 )) || die "Please run as root (sudo)."
+  if [[ $EUID -ne 0 ]]; then
+    die "Please run as root (sudo)."
+  fi
 }
 
 parse_args() {
-  [[ -n "${1:-}" ]] || die "Usage: ${0##*/} <machine_id>"
+  if [[ -z "${1:-}" ]]; then
+    die "Usage: ${0##*/} <machine_id>"
+  fi
   readonly MACHINE_ID="$1"
 }
 
@@ -35,7 +39,9 @@ download_easytier() {
   local latest_url
   latest_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${GITHUB_REPO}/releases/latest")
   local version="${latest_url##*/}"
-  [[ -n "$version" ]] || die "Failed to detect latest version"
+  if [[ -z "$version" ]]; then
+    die "Failed to detect latest version"
+  fi
   log "Architecture: $arch, Version: $version"
 
   local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/easytier-linux-${arch}-${version}.zip"
@@ -76,7 +82,9 @@ install_binary() {
   for bin in easytier-core easytier-cli; do
     local found
     found=$(find "$tmp_dir" -name "$bin" -type f | head -1)
-    [[ -n "$found" ]] || die "$bin not found in archive"
+    if [[ -z "$found" ]]; then
+      die "$bin not found in archive"
+    fi
     install -m 755 "$found" "$INSTALL_DIR/$bin"
   done
 
@@ -84,7 +92,9 @@ install_binary() {
 }
 
 setup_service() {
-  [[ -n "$WEB_ADDR" ]] || die "WEB_ADDR not configured"
+  if [[ -z "$WEB_ADDR" ]]; then
+    die "WEB_ADDR not configured"
+  fi
 
   cat > "$SERVICE_FILE" <<-EOF
 	[Unit]
