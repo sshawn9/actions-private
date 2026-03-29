@@ -1,4 +1,4 @@
-// Subdomain-based file server with declarative route mapping and config injection.
+// Subdomain-based file server with declarative route mapping.
 // All subdomain-to-file mappings must be declared in routes.json.
 // Usage: curl -fsSL https://<name>.sshawn9.com
 
@@ -10,7 +10,6 @@ const REPO = "sshawn9/actions-private";
 const BRANCH = "main";
 const FILES_DIR = "file-server/files";
 const ROUTES_PATH = "file-server/routes.json";
-const CONFIG_PATH = "shared/common-downloader-proxy.conf";
 
 async function fetchRaw(path: string, env: Env): Promise<string | null> {
   const url = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${path}`;
@@ -21,16 +20,6 @@ async function fetchRaw(path: string, env: Env): Promise<string | null> {
     },
   });
   return res.ok ? await res.text() : null;
-}
-
-function applyConfig(content: string, config: string): string {
-  for (const line of config.split("\n")) {
-    const match = line.match(/^(\w+)=(.*)$/);
-    if (match) {
-      content = content.replaceAll(`{{${match[1]}}}`, match[2]);
-    }
-  }
-  return content;
 }
 
 export default {
@@ -53,10 +42,7 @@ export default {
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
 
-    const [routesRaw, config] = await Promise.all([
-      fetchRaw(ROUTES_PATH, env),
-      fetchRaw(CONFIG_PATH, env),
-    ]);
+    const routesRaw = await fetchRaw(ROUTES_PATH, env);
 
     if (!routesRaw) {
       return new Response("Failed to load routes.\n", { status: 502 });
@@ -74,9 +60,7 @@ export default {
       return new Response(`File not found: ${routes[subdomain]}\n`, { status: 404 });
     }
 
-    const body = config ? applyConfig(file, config) : file;
-
-    const response = new Response(body, {
+    const response = new Response(file, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "s-maxage=300",
