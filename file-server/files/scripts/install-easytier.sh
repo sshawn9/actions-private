@@ -21,10 +21,7 @@ check_root() {
 }
 
 parse_args() {
-  if [[ -z "${1:-}" ]]; then
-    die "Usage: ${0##*/} <machine_id>"
-  fi
-  readonly MACHINE_ID="$1"
+  MACHINE_ID="${1:-}"
 }
 
 # Resolve latest version, download with proxy-first + direct fallback (each tried twice)
@@ -96,6 +93,12 @@ setup_service() {
     die "WEB_ADDR not configured"
   fi
 
+  local exec_start="${INSTALL_DIR}/easytier-core"
+  if [[ -n "$MACHINE_ID" ]]; then
+    exec_start+=" --hostname ${MACHINE_ID} --machine-id ${MACHINE_ID}"
+  fi
+  exec_start+=" -w ${WEB_ADDR}"
+
   cat > "$SERVICE_FILE" <<-EOF
 	[Unit]
 	Description=A full meshed p2p VPN, connecting all your devices in one network with one command.
@@ -105,10 +108,7 @@ setup_service() {
 	[Service]
 	Type=simple
 	WorkingDirectory=/tmp
-	ExecStart=${INSTALL_DIR}/easytier-core \\
-	    --hostname ${MACHINE_ID} \\
-	    --machine-id ${MACHINE_ID} \\
-	    -w ${WEB_ADDR}
+	ExecStart=${exec_start}
 	Restart=always
 	RestartSec=1
 	LimitNOFILE=infinity
@@ -119,7 +119,11 @@ setup_service() {
 
   systemctl daemon-reload
   systemctl enable --now "$SERVICE_NAME"
-  log "Service started (machine_id=${MACHINE_ID})"
+  if [[ -n "$MACHINE_ID" ]]; then
+    log "Service started (machine_id=${MACHINE_ID})"
+  else
+    log "Service started"
+  fi
 }
 
 main() {
