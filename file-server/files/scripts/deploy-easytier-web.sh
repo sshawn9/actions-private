@@ -65,45 +65,58 @@ check_config() {
 }
 
 install_dependencies() {
-    info "Installing dependencies..."
+    info "Installing dependencies (curl, unzip)..."
     apt-get update -qq
     apt-get install -y -qq curl unzip > /dev/null 2>&1
+    info "Dependencies ready"
 }
 
 # ======================== Install ========================
 
 install_easytier() {
     if [[ -f "$BIN_PATH" ]] && "$BIN_PATH" --version &>/dev/null; then
-        info "Already installed ($("$BIN_PATH" --version 2>/dev/null)), skipping"
+        info "Already installed ($("$BIN_PATH" --version 2>/dev/null)), skipping download"
         return 0
     fi
 
     # Remove broken binary if exists but not executable
-    [[ -f "$BIN_PATH" ]] && rm -f "$BIN_PATH"
+    if [[ -f "$BIN_PATH" ]]; then
+        info "Removing broken binary..."
+        rm -f "$BIN_PATH"
+    fi
 
-    local arch version url tmp_zip tmp_dir bin_dir
+    local arch
     case "$(uname -m)" in
-        x86_64)  arch="x86_64-unknown-linux-musl" ;;
-        aarch64) arch="aarch64-unknown-linux-musl" ;;
+        x86_64)  arch="x86_64" ;;
+        aarch64) arch="aarch64" ;;
         *)       error "Unsupported arch: $(uname -m)" ;;
     esac
 
+    info "Detecting latest version..."
+    local version
     version=$(curl -fsSI "https://github.com/EasyTier/EasyTier/releases/latest" \
         | grep -i '^location:' | grep -oP '/tag/\K[^\s\r]+')
-    [[ -z "$version" ]] && error "Failed to fetch latest version"
+    if [[ -z "$version" ]]; then
+        error "Failed to fetch latest version"
+    fi
 
-    url="https://github.com/EasyTier/EasyTier/releases/download/${version}/easytier-linux-${arch}-${version}.zip"
-    info "Downloading EasyTier ${version}..."
+    local url="https://github.com/EasyTier/EasyTier/releases/download/${version}/easytier-linux-${arch}-${version}.zip"
+    info "Downloading EasyTier ${version} (${arch})..."
 
+    local tmp_zip tmp_dir
     tmp_zip=$(mktemp /tmp/easytier_XXXXXX.zip)
     tmp_dir=$(mktemp -d /tmp/easytier_XXXXXX)
     trap 'rm -rf "$tmp_zip" "$tmp_dir"' EXIT
 
     curl -fSL -o "$tmp_zip" "$url"
+    info "Download complete, extracting..."
     unzip -qo "$tmp_zip" -d "$tmp_dir"
 
+    local bin_dir
     bin_dir=$(find "$tmp_dir" -name "easytier-web-embed" -printf '%h\n' -quit)
-    [[ -z "$bin_dir" ]] && error "easytier-web-embed not found in archive"
+    if [[ -z "$bin_dir" ]]; then
+        error "easytier-web-embed not found in archive"
+    fi
     install -m 755 "${bin_dir}/easytier-web-embed" "$BIN_PATH"
 
     rm -rf "$tmp_zip" "$tmp_dir"
@@ -123,13 +136,10 @@ install_geoip() {
     info "GeoIP database installed"
 }
 
-show_version() {
-    info "Version: $("$BIN_PATH" --version 2>/dev/null || echo 'N/A')"
-}
-
 # ======================== Data ========================
 
 prepare_dirs() {
+    info "Preparing data directories..."
     mkdir -p "$(dirname "$DB_PATH")"
     mkdir -p "$LOG_DIR"
 }
@@ -138,9 +148,12 @@ prepare_dirs() {
 
 stop_existing_service() {
     if systemctl list-unit-files "${SERVICE_NAME}.service" &>/dev/null; then
+        info "Stopping existing ${SERVICE_NAME}..."
         systemctl stop "$SERVICE_NAME" 2>/dev/null || true
         systemctl disable --quiet "$SERVICE_NAME" 2>/dev/null || true
-        info "Stopped existing ${SERVICE_NAME}"
+        info "Stopped ${SERVICE_NAME}"
+    else
+        info "No existing ${SERVICE_NAME} service found"
     fi
 }
 
@@ -172,16 +185,19 @@ LimitNOFILE=65536
 [Install]
 WantedBy=multi-user.target
 EOF
+    info "Service file created: ${SERVICE_FILE}"
 }
 
 start_service() {
+    info "Starting ${SERVICE_NAME}..."
     systemctl daemon-reload
     systemctl enable --quiet "$SERVICE_NAME"
     systemctl start "$SERVICE_NAME"
 
+    info "Waiting for service to start..."
     sleep 2
     if systemctl is-active --quiet "$SERVICE_NAME"; then
-        info "${SERVICE_NAME} started"
+        info "${SERVICE_NAME} is running"
     else
         error "${SERVICE_NAME} failed to start, check: journalctl -u ${SERVICE_NAME} -n 30"
     fi
@@ -265,16 +281,25 @@ EOF
 # ======================== Main ========================
 
 main() {
+    info "=== EasyTier Web Dashboard Deployment ==="
     check_root
     check_config
+    info "[1/8] Installing dependencies..."
     install_dependencies
+    info "[2/8] Installing EasyTier..."
     install_easytier
-    show_version
+    info "[3/8] Version check"
+    info "Version: $("$BIN_PATH" --version 2>/dev/null || echo 'N/A')"
+    info "[4/8] Preparing directories..."
     prepare_dirs
+    info "[5/8] Installing GeoIP database..."
     install_geoip
+    info "[6/8] Configuring service..."
     stop_existing_service
     create_service
+    info "[7/8] Starting service..."
     start_service
+    info "[8/8] Configuring firewall..."
     configure_firewall
     print_result
 }
