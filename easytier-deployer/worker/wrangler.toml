@@ -1,7 +1,0 @@
-name = "iet"
-main = "src/index.ts"
-compatibility_date = "2025-04-01"
-
-routes = [
-  { pattern = "iet.sshawn9.com", custom_domain = true }
-]
