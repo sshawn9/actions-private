@@ -31,6 +31,6 @@ dns_records = {
 # -------------------- Origin Rules --------------------
 # Override destination port for proxied records (not needed for 80/443)
 origin_rules = {
-  "EasyTier Web panel"     = { hostname = "easytier.sshawn9.com",  port = 11211 }
+  "EasyTier Web panel"     = { hostname = "easytier.sshawn9.com",  port = 11212 }
   "EasyTier Config server" = { hostname = "et-config.sshawn9.com", port = 22020 }
 }

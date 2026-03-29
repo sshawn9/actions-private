@@ -21,7 +21,7 @@ WEB_DOMAIN="easytier.sshawn9.com"
 CONFIG_DOMAIN="et-config.sshawn9.com"
 
 # Ports (official defaults)
-API_PORT=11211
+API_PORT=11212
 CONFIG_PORT=22020
 
 # Config server protocol (ws for CF proxy, clients connect via wss://)
