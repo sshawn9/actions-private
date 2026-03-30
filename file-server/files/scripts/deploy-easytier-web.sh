@@ -1,16 +1,52 @@
 #!/usr/bin/env bash
 # ============================================================
-#  EasyTier Web Dashboard deploy script
-#  For: Ubuntu / Debian
-#  Usage: sudo bash deploy-easytier-web.sh
-#  Idempotent: safe to re-run, will update service config
+#  EasyTier Web Dashboard Deploy Script
+#  Installs easytier-web-embed and configures a systemd service
+#  that serves the EasyTier web management panel and config server.
+#
+#  Supported: Ubuntu / Debian, x86_64 / aarch64
+#  Requires:  root (sudo), curl, unzip
+#  Idempotent: safe to re-run — updates service config, skips
+#              binary download if already installed.
+#
+#  Download & run:
+#    curl -fsSL https://file.sshawn9.com/deploy-easytier-web | sudo bash
+#
+#  Save the script first, then run:
+#    curl -fsSL -OJ https://file.sshawn9.com/deploy-easytier-web
+#    sudo bash deploy-easytier-web.sh
+#
+#  No arguments — all configuration is defined in the
+#  "Configuration" section below (domains, ports, paths).
+#
+#  What this script does:
+#    1. Installs dependencies (curl, unzip)
+#    2. Downloads the latest EasyTier release from GitHub
+#    3. Installs easytier-web-embed to /usr/bin
+#    4. Downloads GeoLite2-City.mmdb for IP geolocation
+#    5. Creates and starts a systemd service "easytier-web"
+#    6. Configures ufw firewall rules (if active)
 #
 #  After deployment:
-#    Node:    easytier-core -w wss://CONFIG_DOMAIN/<username>
-#    Browser: https://WEB_DOMAIN
+#    Web panel:   https://easytier.sshawn9.com
+#    Node connect: easytier-core -w wss://et-config.sshawn9.com:0/<username>
+#
+#    Default accounts (CHANGE PASSWORDS IMMEDIATELY):
+#      admin / admin  (superuser)
+#      user  / user   (regular)
+#
+#    Service management:
+#      systemctl status easytier-web
+#      systemctl restart easytier-web
+#      journalctl -u easytier-web -f
+#
+#  Prerequisites (Cloudflare):
+#    - Two proxied A records: easytier.sshawn9.com, et-config.sshawn9.com
+#    - Two Origin Rules overriding destination ports (11212, 22020)
+#    - SSL/TLS mode: Flexible
+#    - WebSockets enabled (on by default)
+#    See the summary printed at the end of this script for details.
 # ============================================================
-
-# curl -fsSL https://deploy-easytier-web.sshawn9.com | sudo bash
 
 set -euo pipefail
 

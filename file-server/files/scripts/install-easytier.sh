@@ -1,4 +1,64 @@
 #!/usr/bin/env bash
+# ============================================================
+#  EasyTier Node Install Script
+#  Installs the latest EasyTier binaries (easytier-core, easytier-cli)
+#  and configures a systemd service that connects to the config server.
+#
+#  Supported: Ubuntu / Debian, x86_64 / aarch64
+#  Requires:  root (sudo), curl, unzip
+#
+#  Download & run:
+#    curl -fsSL https://file.sshawn9.com/iet | sudo bash
+#
+#  With a machine ID (sets both --hostname and --machine-id):
+#    curl -fsSL https://file.sshawn9.com/iet | sudo bash -s -- <machine-id>
+#
+#  Examples:
+#    # Install with default settings (no machine ID)
+#    curl -fsSL https://file.sshawn9.com/iet | sudo bash
+#
+#    # Install and register as "robot-01"
+#    curl -fsSL https://file.sshawn9.com/iet | sudo bash -s -- robot-01
+#
+#    # Save the script first, then run with arguments
+#    curl -fsSL -OJ https://file.sshawn9.com/iet
+#    sudo bash install-easytier.sh robot-01
+#
+#  Arguments:
+#    $1  machine-id  (optional) Unique identifier for this node.
+#                    Used as both --hostname and --machine-id in the
+#                    easytier-core command. If omitted, EasyTier assigns
+#                    a random ID automatically.
+#
+#  Note on "bash -s -- <arg>" vs "bash -s <arg>":
+#    "bash -s" reads the script from stdin; subsequent arguments become
+#    the script's positional parameters ($1, $2, ...).
+#    The "--" signals the end of bash's own options, so everything after
+#    it is treated as a script argument, never as a bash flag.
+#
+#    Without "--", an argument starting with "-" would be interpreted as
+#    a bash option, causing errors or unexpected behavior:
+#      curl ... | sudo bash -s   -node5    # bash parses -n,-o,-d,-e,-5 as flags → breaks
+#      curl ... | sudo bash -s -- -node5   # $1 = "-node5" as intended ✓
+#
+#    For normal names (e.g. "robot-01") both forms work identically.
+#    Using "--" is a defensive best practice — always safe regardless
+#    of what the argument looks like.
+#
+#  What this script does:
+#    1. Detects architecture (x86_64 / aarch64)
+#    2. Resolves the latest EasyTier release from GitHub
+#    3. Downloads via dl-proxy (fallback: direct from GitHub)
+#    4. Installs easytier-core and easytier-cli to /usr/bin
+#    5. Creates and starts a systemd service "easytier"
+#
+#  After installation:
+#    systemctl status easytier      # Check service status
+#    systemctl restart easytier     # Restart the service
+#    journalctl -u easytier -f      # Follow logs
+#    easytier-cli peer              # List connected peers
+#    easytier-cli route             # Show routing table
+# ============================================================
 set -euo pipefail
 
 readonly INSTALL_DIR="/usr/bin"
