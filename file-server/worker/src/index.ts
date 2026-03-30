@@ -144,9 +144,11 @@ export default {
       file = applyConfig(file, config);
     }
 
+    const fileName = filePath.split("/").pop()!;
     const response = new Response(file, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
         "Cache-Control": "s-maxage=300",
       },
     });
