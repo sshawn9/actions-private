@@ -1,7 +1,8 @@
-// Subdomain-based file server with declarative route mapping.
-// All subdomain-to-file mappings must be declared in routes.json.
+// Path-based file server with declarative route mapping and fuzzy filename matching.
+// All explicit name-to-file mappings are declared in routes.json.
+// When no explicit mapping exists, searches file-server/files/ for a file whose name contains the requested name.
 // Config values from shared/*.conf are injected into {{KEY}} placeholders.
-// Usage: curl -fsSL https://<name>.sshawn9.com
+// Usage: curl -fsSL https://file.sshawn9.com/<name>
 
 interface Env {
   GITHUB_TOKEN: string;
@@ -59,22 +60,51 @@ async function loadConfigs(env: Env): Promise<string[]> {
   return configs;
 }
 
+interface TreeEntry {
+  path: string;
+  type: string;
+}
+
+async function getFileTree(env: Env): Promise<TreeEntry[]> {
+  const url = `https://api.github.com/repos/${REPO}/git/trees/${BRANCH}?recursive=1`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "file-server",
+      Authorization: `token ${env.GITHUB_TOKEN}`,
+      Accept: "application/vnd.github.v3+json",
+    },
+  });
+  if (!res.ok) return [];
+  const data: { tree: TreeEntry[] } = await res.json();
+  return data.tree.filter(
+    (e) => e.type === "blob" && e.path.startsWith(`${FILES_DIR}/`)
+  );
+}
+
+function fuzzyMatch(name: string, tree: TreeEntry[]): string | null {
+  const lower = name.toLowerCase();
+  for (const entry of tree) {
+    const relativePath = entry.path.slice(FILES_DIR.length + 1);
+    const fileName = relativePath.split("/").pop()!.toLowerCase();
+    if (fileName.includes(lower)) {
+      return relativePath;
+    }
+  }
+  return null;
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    const hostname = url.hostname;
+    const name = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "").toLowerCase();
 
-    const parts = hostname.split(".");
-    if (parts.length < 3) {
-      return new Response("Invalid request.\n", { status: 400 });
-    }
-    const subdomain = parts.slice(0, -2).join(".").toLowerCase();
-
-    if (!subdomain || subdomain === "www") {
-      return new Response("No file specified.\n", { status: 400 });
+    if (!name) {
+      return new Response("Usage: curl -fsSL file.sshawn9.com/<name>\n", {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
     }
 
-    const cacheKey = new Request(url.origin);
+    const cacheKey = new Request(`${url.origin}/${name}`);
     const cache = caches.default;
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
@@ -87,14 +117,26 @@ export default {
 
     const routes: Record<string, string> = JSON.parse(routesRaw);
 
-    if (!(subdomain in routes)) {
-      return new Response(`Not found: ${subdomain}\n`, { status: 404 });
+    // 1. Exact match in routes.json
+    let filePath: string | undefined = routes[name];
+
+    // 2. Fuzzy match: search file-server/files/ for a file whose name contains <name>
+    if (!filePath) {
+      const tree = await getFileTree(env);
+      const fuzzyPath = fuzzyMatch(name, tree);
+      if (fuzzyPath) {
+        filePath = fuzzyPath;
+      }
     }
 
-    let file = await fetchRaw(`${FILES_DIR}/${routes[subdomain]}`, env);
+    if (!filePath) {
+      return new Response(`Not found: ${name}\n`, { status: 404 });
+    }
+
+    let file = await fetchRaw(`${FILES_DIR}/${filePath}`, env);
 
     if (!file) {
-      return new Response(`File not found: ${routes[subdomain]}\n`, { status: 404 });
+      return new Response(`File not found: ${filePath}\n`, { status: 404 });
     }
 
     const configs = await loadConfigs(env);
