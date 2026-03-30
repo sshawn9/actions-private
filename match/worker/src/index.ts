@@ -1,0 +1,149 @@
+// Keyword-matching download router.
+// Matches keywords in URL path against rules, resolves latest GitHub release asset, and proxies the file.
+// Usage: curl -fsSL https://match.sshawn9.com/<keywords>
+
+import rules from "./rules.json";
+
+interface Env {
+  GITHUB_TOKEN?: string;
+}
+
+interface GitHubRelease {
+  repo: string;
+  asset_keywords: string[][];
+}
+
+interface Rule {
+  name: string;
+  keywords: string[][];
+  url?: string;
+  github_release?: GitHubRelease;
+}
+
+interface GitHubAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+interface GitHubReleaseResponse {
+  tag_name: string;
+  assets: GitHubAsset[];
+}
+
+function keywordsMatch(input: string, keywords: string[][]): boolean {
+  const lower = input.toLowerCase();
+  return keywords.every(group => group.some(kw => lower.includes(kw.toLowerCase())));
+}
+
+function matchRule(input: string): Rule | null {
+  for (const rule of rules as Rule[]) {
+    if (keywordsMatch(input, rule.keywords)) {
+      return rule;
+    }
+  }
+  return null;
+}
+
+async function resolveGitHubRelease(release: GitHubRelease, env: Env): Promise<{ url: string; fileName: string } | null> {
+  const apiUrl = `https://api.github.com/repos/${release.repo}/releases/latest`;
+  const headers: Record<string, string> = {
+    "User-Agent": "match-proxy",
+    Accept: "application/vnd.github.v3+json",
+  };
+  if (env.GITHUB_TOKEN) {
+    headers["Authorization"] = `token ${env.GITHUB_TOKEN}`;
+  }
+
+  const res = await fetch(apiUrl, { headers });
+  if (!res.ok) return null;
+
+  const data: GitHubReleaseResponse = await res.json();
+
+  for (const asset of data.assets) {
+    if (keywordsMatch(asset.name, release.asset_keywords)) {
+      return { url: asset.browser_download_url, fileName: asset.name };
+    }
+  }
+  return null;
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    const input = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
+
+    if (!input) {
+      const names = (rules as Rule[]).map(r => `  ${r.name}: ${r.keywords.map(g => g.join("|")).join(" + ")}`).join("\n");
+      return new Response(`Usage: curl -fsSL match.sshawn9.com/<keywords>\n\nAvailable rules:\n${names}\n`, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    // Check cache
+    const cacheKey = new Request(`${url.origin}${url.pathname}`);
+    const cache = caches.default;
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+
+    const rule = matchRule(input);
+    if (!rule) {
+      return new Response(`No matching rule for: ${input}\n`, {
+        status: 404,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    let downloadUrl: string;
+    let fileName: string;
+
+    if (rule.github_release) {
+      const resolved = await resolveGitHubRelease(rule.github_release, env);
+      if (!resolved) {
+        return new Response(`Failed to resolve latest release for: ${rule.github_release.repo}\n`, {
+          status: 502,
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        });
+      }
+      downloadUrl = resolved.url;
+      fileName = resolved.fileName;
+    } else if (rule.url) {
+      downloadUrl = rule.url;
+      fileName = rule.url.split("/").pop() || "download";
+    } else {
+      return new Response(`Rule ${rule.name} has no download source configured.\n`, {
+        status: 500,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    const headers: Record<string, string> = { "User-Agent": "match-proxy" };
+    if (env.GITHUB_TOKEN) {
+      const hostname = new URL(downloadUrl).hostname;
+      if (["github.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com"].some(
+        d => hostname === d || hostname.endsWith(`.${d}`)
+      )) {
+        headers["Authorization"] = `token ${env.GITHUB_TOKEN}`;
+      }
+    }
+
+    const upstream = await fetch(downloadUrl, { headers, redirect: "follow" });
+
+    if (!upstream.ok) {
+      return new Response(`Download failed: ${upstream.status} ${upstream.statusText}\n`, {
+        status: upstream.status === 404 ? 404 : 502,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    const response = new Response(upstream.body, {
+      headers: {
+        "Content-Type": upstream.headers.get("Content-Type") || "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Cache-Control": "s-maxage=3600",
+      },
+    });
+
+    ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
+  },
+};

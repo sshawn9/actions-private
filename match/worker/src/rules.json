@@ -1,0 +1,310 @@
+[
+  {
+    "name": "motion-control-x86-deb",
+    "keywords": [
+      [
+        "control"
+      ],
+      [
+        "x86",
+        "amd"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/motion_control",
+      "asset_keywords": [
+        [
+          "motion_control",
+          "x86",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "motion-control-arm-deb",
+    "keywords": [
+      [
+        "control"
+      ],
+      [
+        "arm",
+        "aarch64"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/motion_control",
+      "asset_keywords": [
+        [
+          "motion_control",
+          "aarch64",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "commmunication-utilities-x86-deb",
+    "keywords": [
+      [
+        "commmunication"
+      ],
+      [
+        "x86",
+        "amd"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/communication_utilities",
+      "asset_keywords": [
+        [
+          "communication_utilities",
+          "x86",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "commmunication-utilities-arm-deb",
+    "keywords": [
+      [
+        "commmunication"
+      ],
+      [
+        "arm",
+        "aarch64"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/communication_utilities",
+      "asset_keywords": [
+        [
+          "communication_utilities",
+          "aarch64",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "msg-converter-x86-deb",
+    "keywords": [
+      [
+        "converter"
+      ],
+      [
+        "x86",
+        "amd"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/msg_converter",
+      "asset_keywords": [
+        [
+          "msg_converter",
+          "x86",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "msg-converter-arm-deb",
+    "keywords": [
+      [
+        "converter"
+      ],
+      [
+        "arm",
+        "aarch64"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/msg_converter",
+      "asset_keywords": [
+        [
+          "msg_converter",
+          "aarch64",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "local-roadnet-x86-deb",
+    "keywords": [
+      [
+        "roadnet"
+      ],
+      [
+        "x86",
+        "amd"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/local_roadnet",
+      "asset_keywords": [
+        [
+          "local_roadnet",
+          "x86",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "local-roadnet-arm-deb",
+    "keywords": [
+      [
+        "roadnet"
+      ],
+      [
+        "arm",
+        "aarch64"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/local_roadnet",
+      "asset_keywords": [
+        [
+          "local_roadnet",
+          "aarch64",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "autonomous-joystick-x86-deb",
+    "keywords": [
+      [
+        "joystick"
+      ],
+      [
+        "x86",
+        "amd"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/autonomous_joystick",
+      "asset_keywords": [
+        [
+          "autonomous_joystick",
+          "x86",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "autonomous-joystick-arm-deb",
+    "keywords": [
+      [
+        "joystick"
+      ],
+      [
+        "arm",
+        "aarch64"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/autonomous_joystick",
+      "asset_keywords": [
+        [
+          "autonomous_joystick",
+          "aarch64",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "protopico-x86-deb",
+    "keywords": [
+      [
+        "protopico"
+      ],
+      [
+        "x86",
+        "amd"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/protopico",
+      "asset_keywords": [
+        [
+          "protopico",
+          "x86",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "protopico-arm-deb",
+    "keywords": [
+      [
+        "protopico"
+      ],
+      [
+        "arm",
+        "aarch64"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/protopico",
+      "asset_keywords": [
+        [
+          "protopico",
+          "aarch64",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "fake-pub-x86-deb",
+    "keywords": [
+      [
+        "fake"
+      ],
+      [
+        "x86",
+        "amd"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/fake_pub",
+      "asset_keywords": [
+        [
+          "fake_pub",
+          "x86",
+          ".deb"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "fake-pub-arm-deb",
+    "keywords": [
+      [
+        "fake"
+      ],
+      [
+        "arm",
+        "aarch64"
+      ]
+    ],
+    "github_release": {
+      "repo": "autonomous-group/fake_pub",
+      "asset_keywords": [
+        [
+          "fake_pub",
+          "aarch64",
+          ".deb"
+        ]
+      ]
+    }
+  }
+]
