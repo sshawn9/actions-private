@@ -21,6 +21,7 @@ interface Rule {
 }
 
 interface GitHubAsset {
+  id: number;
   name: string;
   browser_download_url: string;
 }
@@ -44,24 +45,25 @@ function matchRule(input: string): Rule | null {
   return null;
 }
 
-async function resolveGitHubRelease(release: GitHubRelease, env: Env): Promise<{ url: string; fileName: string } | null> {
-  const apiUrl = `https://api.github.com/repos/${release.repo}/releases/latest`;
-  const headers: Record<string, string> = {
-    "User-Agent": "match-proxy",
-    Accept: "application/vnd.github.v3+json",
-  };
-  if (env.GITHUB_TOKEN) {
-    headers["Authorization"] = `token ${env.GITHUB_TOKEN}`;
-  }
+function githubHeaders(env: Env, accept?: string): Record<string, string> {
+  const headers: Record<string, string> = { "User-Agent": "match-proxy" };
+  if (accept) headers["Accept"] = accept;
+  if (env.GITHUB_TOKEN) headers["Authorization"] = `token ${env.GITHUB_TOKEN}`;
+  return headers;
+}
 
-  const res = await fetch(apiUrl, { headers });
+async function resolveGitHubRelease(release: GitHubRelease, env: Env): Promise<{ assetApiUrl: string; fileName: string } | null> {
+  const apiUrl = `https://api.github.com/repos/${release.repo}/releases/latest`;
+  const res = await fetch(apiUrl, { headers: githubHeaders(env, "application/vnd.github.v3+json") });
   if (!res.ok) return null;
 
   const data: GitHubReleaseResponse = await res.json();
 
   for (const asset of data.assets) {
     if (keywordsMatch(asset.name, release.asset_keywords)) {
-      return { url: asset.browser_download_url, fileName: asset.name };
+      // Use API asset endpoint for private repo support
+      const assetApiUrl = `https://api.github.com/repos/${release.repo}/releases/assets/${asset.id}`;
+      return { assetApiUrl, fileName: asset.name };
     }
   }
   return null;
@@ -93,8 +95,8 @@ export default {
       });
     }
 
-    let downloadUrl: string;
     let fileName: string;
+    let upstream: Response;
 
     if (rule.github_release) {
       const resolved = await resolveGitHubRelease(rule.github_release, env);
@@ -104,29 +106,21 @@ export default {
           headers: { "Content-Type": "text/plain; charset=utf-8" },
         });
       }
-      downloadUrl = resolved.url;
       fileName = resolved.fileName;
+      // Download via API with Accept: application/octet-stream (works for private repos)
+      upstream = await fetch(resolved.assetApiUrl, {
+        headers: githubHeaders(env, "application/octet-stream"),
+        redirect: "follow",
+      });
     } else if (rule.url) {
-      downloadUrl = rule.url;
       fileName = rule.url.split("/").pop() || "download";
+      upstream = await fetch(rule.url, { headers: { "User-Agent": "match-proxy" }, redirect: "follow" });
     } else {
       return new Response(`Rule ${rule.name} has no download source configured.\n`, {
         status: 500,
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
-
-    const headers: Record<string, string> = { "User-Agent": "match-proxy" };
-    if (env.GITHUB_TOKEN) {
-      const hostname = new URL(downloadUrl).hostname;
-      if (["github.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com"].some(
-        d => hostname === d || hostname.endsWith(`.${d}`)
-      )) {
-        headers["Authorization"] = `token ${env.GITHUB_TOKEN}`;
-      }
-    }
-
-    const upstream = await fetch(downloadUrl, { headers, redirect: "follow" });
 
     if (!upstream.ok) {
       return new Response(`Download failed: ${upstream.status} ${upstream.statusText}\n`, {
