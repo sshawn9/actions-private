@@ -1,174 +1,175 @@
 # cf-dns
 
-Manage Cloudflare DNS records, Origin Rules, and SSL/TLS mode with Terraform.
-
-All config lives in `terraform.tfvars`. Edit, push to main, GitHub Actions applies automatically.
-
-## Files
-
-```
-cf-dns/
-├── main.tf            # Terraform & Cloudflare provider version
-├── variables.tf       # Variable definitions (no need to edit)
-├── dns.tf             # DNS record logic (no need to edit)
-├── rules.tf           # Origin Rules logic (no need to edit)
-├── zone.tf            # Zone settings: SSL/TLS mode (no need to edit)
-├── terraform.tfvars   # ★ All config goes here
-├── terraform.tfstate  # State file (auto-managed, do not edit)
-└── .gitignore
-```
-
-## Initial Setup
-
-### 1. Get Zone ID
-
-Cloudflare dashboard → select domain → right sidebar "API" section → copy **Zone ID**.
-
-### 2. Create API Token
-
-Cloudflare dashboard → My Profile → API Tokens → Create Token:
-
-- **Zone - DNS - Edit**
-- **Zone - Zone Rulesets - Edit**
-- **Zone - Zone Settings - Edit**
-- Zone Resources → Include → select your domain
-
-### 3. Add GitHub Secret
-
-Repo Settings → Secrets and variables → Actions → New repository secret:
-
-- Name: `CF_API_TOKEN`
-- Value: the token from step 2
+Terraform-managed Cloudflare DNS records, Origin Rules, and SSL/TLS settings for the `sshawn9.com` zone. All config lives in `terraform.tfvars` — edit, push to `main`, and GitHub Actions runs `terraform apply` automatically.
 
 ## Usage
 
-Edit `terraform.tfvars`, then push (or manually trigger the workflow).
+All configuration changes are made by editing `terraform.tfvars` and pushing to the `main` branch. The CI pipeline handles `terraform init` and `terraform apply`.
 
-### Add a server
+For manual operations (rarely needed):
 
-```hcl
-servers = {
-  rn-2c = "104.129.51.144"
-  us1   = "5.6.7.8"          # new
-}
+```bash
+cd cf-dns
+export CLOUDFLARE_API_TOKEN="your-token"
+terraform init
+terraform plan    # Preview changes
+terraform apply   # Apply changes
 ```
 
-### Add a DNS record
+## Current Configuration
 
-Key = subdomain. The record points to the IP of the named server.
+### DNS Records
 
-```hcl
-dns_records = {
-  easytier  = { server = "rn-2c" }
-  et-config = { server = "rn-2c" }
-  blog      = { server = "us1" }                      # blog.sshawn9.com -> us1
-  api       = { server = "us1", proxied = false }      # direct, no CF proxy
-}
-```
+| Subdomain | Type | Server | IP Address | Proxied | Purpose |
+|-----------|------|--------|------------|:-------:|---------|
+| `easytier` | A | rn-2c | 104.129.51.144 | Yes | EasyTier web panel |
+| `et-config` | A | rn-2c | 104.129.51.144 | Yes | EasyTier config server |
 
-Parameters:
+**Note:** Worker custom domains (`file.sshawn9.com`, `match.sshawn9.com`, `dl.sshawn9.com`) are **not** managed here — Cloudflare Workers automatically create and manage DNS records for `custom_domain` routes defined in `wrangler.toml`.
 
-| Param | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `server` | yes | - | Name from `servers` map |
-| `type` | no | `"A"` | DNS record type |
-| `proxied` | no | `true` | Route through Cloudflare proxy (orange cloud) |
+### Origin Rules
 
-### Add an Origin Rule (port override)
+| Description | Hostname | Destination Port |
+|-------------|----------|:----------------:|
+| EasyTier Web panel | `easytier.sshawn9.com` | 11212 |
+| EasyTier Config server | `et-config.sshawn9.com` | 22020 |
 
-Required when a proxied service listens on a non-standard port (not 80/443):
+Origin Rules override the destination port for proxied requests. Without these rules, Cloudflare forwards traffic to port 80/443 on the origin. Not needed for `proxied = false` records — clients connect to `IP:port` directly.
 
-```hcl
-origin_rules = {
-  "EasyTier Web panel"     = { hostname = "easytier.sshawn9.com",  port = 11211 }
-  "EasyTier Config server" = { hostname = "et-config.sshawn9.com", port = 22020 }
-  "Grafana"                = { hostname = "grafana.sshawn9.com",   port = 3000  }
-}
-```
+### Servers
 
-> Not needed for `proxied = false` records — clients connect to `IP:port` directly.
+| Alias | IP Address |
+|-------|------------|
+| rn-2c | 104.129.51.144 |
 
-### Migrate services to another server
+Server aliases allow DNS records to reference servers by name. Changing an IP in `servers` automatically updates all records pointing to that alias.
 
-Change the `server` value:
+### SSL/TLS Mode
 
-```hcl
-dns_records = {
-  easytier  = { server = "us1" }   # was rn-2c
-  et-config = { server = "us1" }   # was rn-2c
-}
-```
+Current mode: **flexible**
 
-### Change a server IP
-
-Update one value in `servers` — all DNS records pointing to it update automatically:
-
-```hcl
-servers = {
-  rn-2c = "9.8.7.6"   # new IP, all rn-2c records follow
-}
-```
-
-### Delete a record
-
-Remove the line from `dns_records` or `origin_rules`. Terraform deletes it from Cloudflare on next apply.
-
-### Change SSL/TLS mode
-
-```hcl
-ssl_mode = "flexible"   # off | flexible | full | strict
-```
+| Mode | Description |
+|------|-------------|
+| `off` | No encryption |
+| `flexible` | Encrypted client-to-Cloudflare, **plaintext** Cloudflare-to-origin (no cert needed on origin) |
+| `full` | Encrypted end-to-end (origin needs a cert, self-signed OK) |
+| `strict` | Encrypted end-to-end (origin needs a valid/trusted cert) |
 
 This is a zone-wide setting (applies to all subdomains).
 
-## Full Example
+## Configuration Files
+
+### terraform.tfvars
+
+This is the **only file you need to edit** for configuration changes:
 
 ```hcl
-zone_id  = "abc123def456"
+zone_id  = "2cbfbc36ae05bc041b712442e2f7b584"
 ssl_mode = "flexible"
 
 servers = {
-  hk1 = "103.1.2.3"
-  us1 = "198.51.100.1"
-  jp1 = "203.0.113.5"
+  rn-2c = "104.129.51.144"
 }
 
 dns_records = {
-  easytier  = { server = "hk1" }
-  et-config = { server = "hk1" }
-  blog      = { server = "us1" }
-  api       = { server = "us1" }
-  grafana   = { server = "jp1" }
-  ssh-jp    = { server = "jp1", proxied = false }
+  easytier  = { server = "rn-2c" }
+  et-config = { server = "rn-2c" }
 }
 
 origin_rules = {
-  "EasyTier Web"    = { hostname = "easytier.sshawn9.com",  port = 11211 }
-  "EasyTier Config" = { hostname = "et-config.sshawn9.com", port = 22020 }
-  "Grafana"         = { hostname = "grafana.sshawn9.com",   port = 3000  }
+  "EasyTier Web panel"     = { hostname = "easytier.sshawn9.com",  port = 11212 }
+  "EasyTier Config server" = { hostname = "et-config.sshawn9.com", port = 22020 }
 }
 ```
 
-## Importing Existing Records
+### Terraform Files
 
-If a DNS record already exists in Cloudflare, `terraform apply` will fail with a conflict. Import it first:
+| File | Purpose |
+|------|---------|
+| `main.tf` | Provider configuration (Cloudflare provider v4.x, reads `CLOUDFLARE_API_TOKEN` from env) |
+| `variables.tf` | Variable definitions with types, defaults, and descriptions |
+| `dns.tf` | `cloudflare_record` resource — creates DNS records from `dns_records` map |
+| `rules.tf` | `cloudflare_ruleset` resource — creates Origin Rules from `origin_rules` map |
+| `zone.tf` | `cloudflare_zone_settings_override` resource — sets SSL/TLS mode |
+| `terraform.tfstate` | Terraform state file (auto-managed by CI, do not edit manually) |
 
-1. Find the record ID in the Cloudflare dashboard or via API
-2. Add an import block to `main.tf`:
+## Adding a DNS Record
 
+1. If the server IP is new, add it to `servers`:
+   ```hcl
+   servers = {
+     rn-2c    = "104.129.51.144"
+     new-srv  = "203.0.113.50"
+   }
+   ```
+
+2. Add the DNS record to `dns_records`:
+   ```hcl
+   dns_records = {
+     easytier  = { server = "rn-2c" }
+     myapp     = { server = "new-srv" }
+     myapi     = { server = "new-srv", type = "A", proxied = false }
+   }
+   ```
+
+   | Parameter | Required | Default | Description |
+   |-----------|----------|---------|-------------|
+   | `server` | Yes | — | Name from `servers` map |
+   | `type` | No | `"A"` | DNS record type |
+   | `proxied` | No | `true` | Route through Cloudflare proxy (orange cloud) |
+
+3. If the origin uses a non-standard port (not 80/443), add an Origin Rule:
+   ```hcl
+   origin_rules = {
+     "My App" = { hostname = "myapp.sshawn9.com", port = 8080 }
+   }
+   ```
+
+4. Push to `main` — CI runs `terraform apply` automatically
+
+### Other Common Operations
+
+**Migrate services to another server** — change the `server` value:
 ```hcl
-import {
-  to = cloudflare_record.dns["easytier"]
-  id = "<zone_id>/<record_id>"
+easytier = { server = "us1" }   # was rn-2c
+```
+
+**Change a server IP** — update one value in `servers`, all referencing records follow:
+```hcl
+servers = {
+  rn-2c = "9.8.7.6"   # new IP
 }
 ```
 
-3. Run apply once, then remove the import block
+**Delete a record** — remove the line from `dns_records` or `origin_rules`. Terraform deletes it from Cloudflare on next apply.
 
-Alternatively, delete the existing record from the dashboard and let Terraform recreate it.
+## SSL/TLS Mode
+
+To change the SSL/TLS mode:
+```hcl
+ssl_mode = "full"
+```
+
+**Important:** Switching to `full` or `strict` requires a valid SSL certificate on the origin server.
+
+## State Management
+
+Terraform state (`terraform.tfstate`) is committed directly to this git repository. After each `terraform apply`, the CI pipeline automatically commits the updated state file with the message `"Update Terraform state"`.
+
+- State is versioned alongside configuration
+- No external state backend required
+- Pull before making local changes to avoid state conflicts
+- The CI job has `contents: write` permission to push state updates
 
 ## Notes
 
-- **Origin Rules are managed as a whole ruleset.** If you have manually created Origin Rules in the dashboard, add them to `terraform.tfvars` or they will be overwritten. DNS records do not have this problem — Terraform only touches records it manages.
-- **Do not edit `terraform.tfstate` manually.** It is committed by GitHub Actions after each apply.
-- **API Token permissions:** Zone DNS Edit + Zone Rulesets Edit + Zone Settings Edit.
+- **Origin Rules are managed as a whole ruleset.** If you have manually created Origin Rules in the Cloudflare dashboard, add them to `terraform.tfvars` or they will be overwritten. DNS records do not have this problem — Terraform only touches records it manages.
+- **Importing existing records:** If a DNS record already exists in Cloudflare, `terraform apply` will fail with a conflict. Either delete the existing record from the dashboard first, or use a Terraform import block:
+  ```hcl
+  import {
+    to = cloudflare_record.dns["easytier"]
+    id = "<zone_id>/<record_id>"
+  }
+  ```
+  Run apply once, then remove the import block.
+- **API Token permissions required:** Zone DNS Edit + Zone Rulesets Edit + Zone Settings Edit.
