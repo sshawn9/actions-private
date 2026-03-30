@@ -130,7 +130,6 @@ stop_existing() {
 install_binary() {
   local tmp_dir
   tmp_dir=$(mktemp -d)
-  trap 'rm -rf "$tmp_dir"' EXIT
 
   download_easytier "$tmp_dir/easytier.zip"
   unzip -q "$tmp_dir/easytier.zip" -d "$tmp_dir"
@@ -140,11 +139,13 @@ install_binary() {
     local found
     found=$(find "$tmp_dir" -name "$bin" -type f | head -1)
     if [[ -z "$found" ]]; then
+      rm -rf "$tmp_dir"
       die "$bin not found in archive"
     fi
     install -m 755 "$found" "$INSTALL_DIR/$bin"
   done
 
+  rm -rf "$tmp_dir"
   log "Installed to $INSTALL_DIR"
 }
 
@@ -186,11 +187,27 @@ setup_service() {
   fi
 }
 
+is_latest() {
+  local current
+  current=$("${INSTALL_DIR}/easytier-core" --version 2>/dev/null | grep -oP '[\d.]+' | head -1) || return 1
+  local latest_url
+  latest_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${GITHUB_REPO}/releases/latest")
+  local latest="${latest_url##*/}"
+  latest="${latest#v}"
+  [[ "$current" == "$latest" ]]
+}
+
 main() {
   check_root
   parse_args "$@"
-  stop_existing
-  install_binary
+
+  if is_latest; then
+    log "Already up to date ($(${INSTALL_DIR}/easytier-core --version 2>/dev/null)), skipping download"
+  else
+    stop_existing
+    install_binary
+  fi
+
   setup_service
 }
 
