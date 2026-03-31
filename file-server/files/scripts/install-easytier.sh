@@ -84,7 +84,27 @@ parse_args() {
   MACHINE_ID="${1:-}"
 }
 
-# Resolve latest version, download with proxy-first + direct fallback (each tried twice)
+# Resolve latest version tag from GitHub API, proxy-first + direct fallback
+resolve_latest_version() {
+  local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+  local proxy_api_url="${DL_PROXY}/${api_url#https://}?token=${DL_TOKEN}"
+
+  local json version
+  for src in "proxy:$proxy_api_url" "direct:$api_url"; do
+    local label="${src%%:*}" target="${src#*:}"
+    if json=$(curl -fsSL --connect-timeout 10 "$target" 2>/dev/null); then
+      version=$(printf '%s' "$json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' | head -1)
+      if [[ -n "$version" ]]; then
+        printf '%s' "$version"
+        return 0
+      fi
+    fi
+    err "resolve version ($label) failed"
+  done
+  return 1
+}
+
+# Download EasyTier binary, proxy-first + direct fallback (each tried twice)
 download_easytier() {
   local arch
   arch=$(uname -m)
@@ -93,12 +113,8 @@ download_easytier() {
     *) die "Unsupported architecture: $arch" ;;
   esac
 
-  local latest_url
-  latest_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${GITHUB_REPO}/releases/latest")
-  local version="${latest_url##*/}"
-  if [[ -z "$version" ]]; then
-    die "Failed to detect latest version"
-  fi
+  local version
+  version=$(resolve_latest_version) || die "Failed to detect latest version"
   log "Architecture: $arch, Version: $version"
 
   local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/easytier-linux-${arch}-${version}.zip"
@@ -190,10 +206,9 @@ setup_service() {
 is_latest() {
   local current
   current=$("${INSTALL_DIR}/easytier-core" --version 2>/dev/null | grep -oP '[\d.]+' | head -1) || return 1
-  local latest_url
-  latest_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${GITHUB_REPO}/releases/latest")
-  local latest="${latest_url##*/}"
-  latest="${latest#v}"
+  local version
+  version=$(resolve_latest_version) || return 1
+  local latest="${version#v}"
   [[ "$current" == "$latest" ]]
 }
 
@@ -250,7 +265,7 @@ main() {
 
   # Export functions and variables needed by the detached subprocess
   export INSTALL_DIR SERVICE_NAME SERVICE_FILE WEB_ADDR MACHINE_ID
-  export -f log err die stop_existing setup_service do_upgrade_detached
+  export -f log err die stop_existing setup_service do_upgrade_detached resolve_latest_version
 
   nohup setsid bash -c 'do_upgrade_detached "$@"' _ "$tmp_dir" </dev/null >/dev/null 2>&1 &
   log "Upgrade launched in background. Check /tmp/easytier-upgrade.log for results."
