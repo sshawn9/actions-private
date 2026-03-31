@@ -212,8 +212,9 @@ write_service_file() {
 
 start_service() {
   systemctl daemon-reload
-  systemctl enable --now "$SERVICE_NAME"
-  log "Service $SERVICE_NAME enabled and started"
+  systemctl enable "$SERVICE_NAME"
+  systemctl restart "$SERVICE_NAME"
+  log "Service $SERVICE_NAME enabled and restarted"
   if [[ -n "$MACHINE_ID" ]]; then
     log "Machine ID: $MACHINE_ID"
   fi
