@@ -61,6 +61,7 @@
 # ============================================================
 set -euo pipefail
 
+# ── Constants ────────────────────────────────────────────────
 readonly INSTALL_DIR="/usr/bin"
 readonly SERVICE_NAME="easytier"
 readonly SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -70,21 +71,51 @@ readonly GITHUB_REPO="EasyTier/EasyTier"
 readonly DL_PROXY="{{DL_PROXY}}"
 readonly DL_TOKEN="{{DL_TOKEN}}"
 
-log()  { printf '[INFO]  %s\n' "$*"; }
-err()  { printf '[ERROR] %s\n' "$*" >&2; }
+readonly UPGRADE_LOG="/tmp/easytier-upgrade.log"
+
+# ── Logging helpers ──────────────────────────────────────────
+log()  { printf '\033[32m[INFO]\033[0m  %s\n' "$*"; }
+warn() { printf '\033[33m[WARN]\033[0m  %s\n' "$*" >&2; }
+err()  { printf '\033[31m[ERROR]\033[0m %s\n' "$*" >&2; }
 die()  { err "$@"; exit 1; }
 
+step() {
+  CURRENT_STEP=$((CURRENT_STEP + 1))
+  printf '\n\033[1;36m[Step %d/%d]\033[0m %s\n' "$CURRENT_STEP" "$TOTAL_STEPS" "$*"
+}
+
+CURRENT_STEP=0
+TOTAL_STEPS=0
+
+# ── Preflight checks ────────────────────────────────────────
 check_root() {
   if [[ $EUID -ne 0 ]]; then
     die "Please run as root (sudo)."
   fi
 }
 
-parse_args() {
-  MACHINE_ID="${1:-}"
+check_deps() {
+  local missing=()
+  for cmd in curl unzip; do
+    if ! command -v "$cmd" &>/dev/null; then
+      missing+=("$cmd")
+    fi
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    die "Missing required commands: ${missing[*]}"
+  fi
 }
 
-# Resolve latest version tag from GitHub API, proxy-first + direct fallback
+detect_arch() {
+  ARCH=$(uname -m)
+  case "$ARCH" in
+    x86_64|aarch64) ;;
+    *) die "Unsupported architecture: $ARCH" ;;
+  esac
+  log "Architecture: $ARCH"
+}
+
+# ── Version resolution (proxy-first) ────────────────────────
 resolve_latest_version() {
   local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
   local proxy_api_url="${DL_PROXY}/${api_url#https://}?token=${DL_TOKEN}"
@@ -92,6 +123,7 @@ resolve_latest_version() {
   local json version
   for src in "proxy:$proxy_api_url" "direct:$api_url"; do
     local label="${src%%:*}" target="${src#*:}"
+    log "Resolving latest version ($label) ..."
     if json=$(curl -fsSL --connect-timeout 10 "$target" 2>/dev/null); then
       version=$(printf '%s' "$json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' | head -1)
       if [[ -n "$version" ]]; then
@@ -99,77 +131,57 @@ resolve_latest_version() {
         return 0
       fi
     fi
-    err "resolve version ($label) failed"
+    warn "Resolve version via $label failed, trying next ..."
   done
   return 1
 }
 
-# Download EasyTier binary, proxy-first + direct fallback (each tried twice)
-download_easytier() {
-  local arch
-  arch=$(uname -m)
-  case "$arch" in
-    x86_64|aarch64) ;;
-    *) die "Unsupported architecture: $arch" ;;
-  esac
+is_latest() {
+  local current
+  current=$("${INSTALL_DIR}/easytier-core" --version 2>/dev/null | grep -oP '[\d.]+' | head -1) || return 1
+
+  local version
+  version=$(resolve_latest_version) || return 1
+  local latest="${version#v}"
+
+  if [[ "$current" == "$latest" ]]; then
+    log "Current: v$current = Latest: v$latest"
+    return 0
+  else
+    log "Current: v$current -> Latest: v$latest (upgrade needed)"
+    return 1
+  fi
+}
+
+# ── Download (proxy-first, each tried twice) ─────────────────
+download_binary() {
+  local output="$1"
 
   local version
   version=$(resolve_latest_version) || die "Failed to detect latest version"
-  log "Architecture: $arch, Version: $version"
+  log "Latest version: $version"
 
-  local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/easytier-linux-${arch}-${version}.zip"
+  local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/easytier-linux-${ARCH}-${version}.zip"
   local proxy_url="${DL_PROXY}/${url#https://}?token=${DL_TOKEN}"
-  local output="$1"
 
   local src attempt
   for src in "proxy:$proxy_url" "direct:$url"; do
     local label="${src%%:*}" target="${src#*:}"
     for attempt in 1 2; do
-      log "Downloading ($label, attempt $attempt) ..."
+      log "Downloading ($label, attempt $attempt/2) ..."
       if curl -fsSL --connect-timeout 10 "$target" -o "$output"; then
+        log "Download complete"
         return 0
       fi
-      err "$label attempt $attempt failed"
+      warn "$label attempt $attempt failed"
     done
   done
 
   die "All download attempts failed"
 }
 
-stop_existing() {
-  if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
-    log "Stopping existing $SERVICE_NAME service ..."
-    systemctl stop "$SERVICE_NAME"
-  fi
-}
-
-install_binary() {
-  local tmp_dir
-  tmp_dir=$(mktemp -d)
-
-  download_easytier "$tmp_dir/easytier.zip"
-  unzip -q "$tmp_dir/easytier.zip" -d "$tmp_dir"
-
-  local bin
-  for bin in easytier-core easytier-cli; do
-    local found
-    found=$(find "$tmp_dir" -name "$bin" -type f | head -1)
-    if [[ -z "$found" ]]; then
-      rm -rf "$tmp_dir"
-      die "$bin not found in archive"
-    fi
-    install -m 755 "$found" "$INSTALL_DIR/$bin"
-  done
-
-  rm -rf "$tmp_dir"
-  log "Installed to $INSTALL_DIR"
-}
-
-setup_service() {
-  if [[ -z "$WEB_ADDR" ]]; then
-    die "WEB_ADDR not configured"
-  fi
-
+# ── Service management ───────────────────────────────────────
+write_service_file() {
   local exec_start="${INSTALL_DIR}/easytier-core"
   if [[ -n "$MACHINE_ID" ]]; then
     exec_start+=" --hostname ${MACHINE_ID} --machine-id ${MACHINE_ID}"
@@ -194,36 +206,33 @@ setup_service() {
 	WantedBy=multi-user.target
 	EOF
 
+  log "Service file written: $SERVICE_FILE"
+}
+
+start_service() {
   systemctl daemon-reload
   systemctl enable --now "$SERVICE_NAME"
+  log "Service $SERVICE_NAME enabled and started"
   if [[ -n "$MACHINE_ID" ]]; then
-    log "Service started (machine_id=${MACHINE_ID})"
-  else
-    log "Service started"
+    log "Machine ID: $MACHINE_ID"
   fi
 }
 
-is_latest() {
-  local current
-  current=$("${INSTALL_DIR}/easytier-core" --version 2>/dev/null | grep -oP '[\d.]+' | head -1) || return 1
-  local version
-  version=$(resolve_latest_version) || return 1
-  local latest="${version#v}"
-  [[ "$current" == "$latest" ]]
-}
-
-## Detached upgrade: stop → replace binaries → start in a background process
-## so that even if the current connection (e.g. via EasyTier) drops, the
-## script still finishes.
+# ── Detached upgrade ─────────────────────────────────────────
+# Runs stop -> replace binaries -> start in a background process detached
+# from the terminal, so that even if the connection (e.g. via EasyTier)
+# drops on stop, the script still finishes.
 do_upgrade_detached() {
   local tmp_dir="$1"
-  local log_file="/tmp/easytier-upgrade.log"
 
-  # This function runs detached from the terminal via setsid/nohup.
   {
-    log "Stopping existing $SERVICE_NAME service ..."
-    systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+    log "=== Detached upgrade started at $(date) ==="
 
+    log "Stopping $SERVICE_NAME service ..."
+    systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+    log "Service stopped"
+
+    log "Installing binaries to $INSTALL_DIR ..."
     local bin
     for bin in easytier-core easytier-cli; do
       local found
@@ -234,41 +243,86 @@ do_upgrade_detached() {
         exit 1
       fi
       install -m 755 "$found" "$INSTALL_DIR/$bin"
+      log "  Installed: $bin"
     done
     rm -rf "$tmp_dir"
-    log "Installed to $INSTALL_DIR"
 
-    setup_service
-    log "Upgrade complete!"
-  } >> "$log_file" 2>&1
+    log "Writing service configuration ..."
+    write_service_file
+
+    log "Starting service ..."
+    start_service
+
+    log "=== Upgrade complete at $(date) ==="
+  } >> "$UPGRADE_LOG" 2>&1
 }
 
+# ── Main ─────────────────────────────────────────────────────
 main() {
   check_root
-  parse_args "$@"
 
+  MACHINE_ID="${1:-}"
+  ARCH=""
+
+  printf '\n\033[1m  EasyTier Node Installer\033[0m\n'
+  if [[ -n "$MACHINE_ID" ]]; then
+    printf '  Machine ID: %s\n' "$MACHINE_ID"
+  fi
+  printf '\n'
+
+  # Decide total steps based on whether an upgrade is needed
+  log "Checking prerequisites ..."
+  check_deps
+  detect_arch
+
+  log "Checking installed version ..."
   if is_latest; then
-    log "Already up to date ($(${INSTALL_DIR}/easytier-core --version 2>/dev/null)), skipping download"
-    setup_service
+    TOTAL_STEPS=2
+
+    step "Update service configuration"
+    write_service_file
+
+    step "Restart service"
+    start_service
+
+    printf '\n\033[1;32m  Already up to date. Service restarted.\033[0m\n\n'
     return
   fi
 
-  # Download first (while the connection is still alive)
+  TOTAL_STEPS=4
+
+  step "Download latest release"
   local tmp_dir
   tmp_dir=$(mktemp -d)
-  download_easytier "$tmp_dir/easytier.zip"
+  download_binary "$tmp_dir/easytier.zip"
+
+  step "Extract archive"
   unzip -q "$tmp_dir/easytier.zip" -d "$tmp_dir"
+  local count
+  count=$(find "$tmp_dir" \( -name "easytier-core" -o -name "easytier-cli" \) -type f | wc -l)
+  log "Extracted $count binaries"
+  if [[ "$count" -lt 2 ]]; then
+    rm -rf "$tmp_dir"
+    die "Expected 2 binaries (easytier-core, easytier-cli), found $count"
+  fi
 
-  # Run stop → install → start detached from the terminal, so if the
-  # EasyTier connection drops on stop, the script still finishes.
-  log "Starting detached upgrade (log: /tmp/easytier-upgrade.log) ..."
+  step "Stop service & install binaries (detached)"
+  log "The upgrade will continue in a detached background process."
+  log "This prevents connection loss from interrupting the upgrade."
+  log "Progress log: $UPGRADE_LOG"
+  : > "$UPGRADE_LOG"
 
-  # Export functions and variables needed by the detached subprocess
-  export INSTALL_DIR SERVICE_NAME SERVICE_FILE WEB_ADDR MACHINE_ID
-  export -f log err die stop_existing setup_service do_upgrade_detached resolve_latest_version
+  export INSTALL_DIR SERVICE_NAME SERVICE_FILE WEB_ADDR MACHINE_ID UPGRADE_LOG
+  export -f log warn err die write_service_file start_service do_upgrade_detached
 
   nohup setsid bash -c 'do_upgrade_detached "$@"' _ "$tmp_dir" </dev/null >/dev/null 2>&1 &
-  log "Upgrade launched in background. Check /tmp/easytier-upgrade.log for results."
+
+  step "Done"
+  log "Upgrade launched in background (PID: $!)"
+  log "Check progress: cat $UPGRADE_LOG"
+  log "After reconnecting: systemctl status easytier"
+
+  printf '\n\033[1;32m  Upgrade in progress. Service will restart automatically.\033[0m\n\n'
 }
 
 main "$@"
