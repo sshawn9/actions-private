@@ -120,14 +120,15 @@ resolve_latest_version() {
   local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
   local proxy_api_url="${DL_PROXY}/${api_url#https://}?token=${DL_TOKEN}"
 
-  local json version
+  local json ver
   for src in "proxy:$proxy_api_url" "direct:$api_url"; do
     local label="${src%%:*}" target="${src#*:}"
     log "Resolving latest version ($label) ..."
     if json=$(curl -fsSL --connect-timeout 10 "$target" 2>/dev/null); then
-      version=$(printf '%s' "$json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' | head -1)
-      if [[ -n "$version" ]]; then
-        printf '%s' "$version"
+      ver=$(printf '%s' "$json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' | head -1)
+      if [[ -n "$ver" ]]; then
+        LATEST_VERSION="$ver"
+        log "Latest version: $LATEST_VERSION"
         return 0
       fi
     fi
@@ -136,20 +137,19 @@ resolve_latest_version() {
   return 1
 }
 
-is_latest() {
+check_upgrade_needed() {
   local current
-  current=$("${INSTALL_DIR}/easytier-core" --version 2>/dev/null | grep -oP '[\d.]+' | head -1) || return 1
+  current=$("${INSTALL_DIR}/easytier-core" --version 2>/dev/null | grep -oP '[\d.]+' | head -1) || return 0
 
-  local version
-  version=$(resolve_latest_version) || return 1
-  local latest="${version#v}"
+  resolve_latest_version || return 0
+  local latest="${LATEST_VERSION#v}"
 
   if [[ "$current" == "$latest" ]]; then
-    log "Current: v$current = Latest: v$latest"
-    return 0
+    log "Current: v$current = Latest: v$latest (up to date)"
+    return 1  # no upgrade needed
   else
     log "Current: v$current -> Latest: v$latest (upgrade needed)"
-    return 1
+    return 0
   fi
 }
 
@@ -157,11 +157,12 @@ is_latest() {
 download_binary() {
   local output="$1"
 
-  local version
-  version=$(resolve_latest_version) || die "Failed to detect latest version"
-  log "Latest version: $version"
+  # LATEST_VERSION is already set by check_upgrade_needed / resolve_latest_version
+  if [[ -z "${LATEST_VERSION:-}" ]]; then
+    resolve_latest_version || die "Failed to detect latest version"
+  fi
 
-  local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/easytier-linux-${ARCH}-${version}.zip"
+  local url="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/easytier-linux-${ARCH}-${LATEST_VERSION}.zip"
   local proxy_url="${DL_PROXY}/${url#https://}?token=${DL_TOKEN}"
 
   local src attempt
@@ -263,6 +264,7 @@ main() {
 
   MACHINE_ID="${1:-}"
   ARCH=""
+  LATEST_VERSION=""
 
   printf '\n\033[1m  EasyTier Node Installer\033[0m\n'
   if [[ -n "$MACHINE_ID" ]]; then
@@ -276,7 +278,7 @@ main() {
   detect_arch
 
   log "Checking installed version ..."
-  if is_latest; then
+  if ! check_upgrade_needed; then
     TOTAL_STEPS=2
 
     step "Update service configuration"
@@ -313,7 +315,7 @@ main() {
   : > "$UPGRADE_LOG"
 
   export INSTALL_DIR SERVICE_NAME SERVICE_FILE WEB_ADDR MACHINE_ID UPGRADE_LOG
-  export -f log warn err die write_service_file start_service do_upgrade_detached
+  export -f log warn err die write_service_file start_service do_upgrade_detached resolve_latest_version
 
   nohup setsid bash -c 'do_upgrade_detached "$@"' _ "$tmp_dir" </dev/null >/dev/null 2>&1 &
 
