@@ -197,18 +197,63 @@ is_latest() {
   [[ "$current" == "$latest" ]]
 }
 
+## Detached upgrade: stop → replace binaries → start in a background process
+## so that even if the current connection (e.g. via EasyTier) drops, the
+## script still finishes.
+do_upgrade_detached() {
+  local tmp_dir="$1"
+  local log_file="/tmp/easytier-upgrade.log"
+
+  # This function runs detached from the terminal via setsid/nohup.
+  {
+    log "Stopping existing $SERVICE_NAME service ..."
+    systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+
+    local bin
+    for bin in easytier-core easytier-cli; do
+      local found
+      found=$(find "$tmp_dir" -name "$bin" -type f | head -1)
+      if [[ -z "$found" ]]; then
+        err "$bin not found in archive"
+        rm -rf "$tmp_dir"
+        exit 1
+      fi
+      install -m 755 "$found" "$INSTALL_DIR/$bin"
+    done
+    rm -rf "$tmp_dir"
+    log "Installed to $INSTALL_DIR"
+
+    setup_service
+    log "Upgrade complete!"
+  } >> "$log_file" 2>&1
+}
+
 main() {
   check_root
   parse_args "$@"
 
   if is_latest; then
     log "Already up to date ($(${INSTALL_DIR}/easytier-core --version 2>/dev/null)), skipping download"
-  else
-    stop_existing
-    install_binary
+    setup_service
+    return
   fi
 
-  setup_service
+  # Download first (while the connection is still alive)
+  local tmp_dir
+  tmp_dir=$(mktemp -d)
+  download_easytier "$tmp_dir/easytier.zip"
+  unzip -q "$tmp_dir/easytier.zip" -d "$tmp_dir"
+
+  # Run stop → install → start detached from the terminal, so if the
+  # EasyTier connection drops on stop, the script still finishes.
+  log "Starting detached upgrade (log: /tmp/easytier-upgrade.log) ..."
+
+  # Export functions and variables needed by the detached subprocess
+  export INSTALL_DIR SERVICE_NAME SERVICE_FILE WEB_ADDR MACHINE_ID
+  export -f log err die stop_existing setup_service do_upgrade_detached
+
+  nohup setsid bash -c 'do_upgrade_detached "$@"' _ "$tmp_dir" </dev/null >/dev/null 2>&1 &
+  log "Upgrade launched in background. Check /tmp/easytier-upgrade.log for results."
 }
 
 main "$@"
