@@ -114,8 +114,8 @@ When a rule uses `github_release`, the Worker:
 |------|----------|------|-------------|
 | motion-control-x86-deb | control + (x86\|amd) | autonomous-group/motion_control | (x86\|x86_64\|amd64) + .deb |
 | motion-control-arm-deb | control + (arm\|aarch64) | autonomous-group/motion_control | (aarch64\|arm64) + .deb |
-| commmunication-utilities-x86-deb | commmunication + (x86\|amd) | autonomous-group/communication_utilities | (x86\|x86_64\|amd64) + .deb |
-| commmunication-utilities-arm-deb | commmunication + (arm\|aarch64) | autonomous-group/communication_utilities | (aarch64\|arm64) + .deb |
+| communication-utilities-x86-deb | communication + (x86\|amd) | autonomous-group/communication_utilities | (x86\|x86_64\|amd64) + .deb |
+| communication-utilities-arm-deb | communication + (arm\|aarch64) | autonomous-group/communication_utilities | (aarch64\|arm64) + .deb |
 | msg-converter-x86-deb | converter + (x86\|amd) | autonomous-group/msg_converter | (x86\|x86_64\|amd64) + .deb |
 | msg-converter-arm-deb | converter + (arm\|aarch64) | autonomous-group/msg_converter | (aarch64\|arm64) + .deb |
 | local-roadnet-x86-deb | roadnet + (x86\|amd) | autonomous-group/local_roadnet | (x86\|x86_64\|amd64) + .deb |

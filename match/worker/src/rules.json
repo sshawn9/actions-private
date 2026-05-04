@@ -16,16 +16,16 @@
     }
   },
   {
-    "name": "commmunication-utilities-x86-deb",
-    "keywords": [["commmunication"], ["x86", "amd"]],
+    "name": "communication-utilities-x86-deb",
+    "keywords": [["communication"], ["x86", "amd"]],
     "github_release": {
       "repo": "autonomous-group/communication_utilities",
       "asset_keywords": [["x86", "x86_64", "amd64"], [".deb"]]
     }
   },
   {
-    "name": "commmunication-utilities-arm-deb",
-    "keywords": [["commmunication"], ["arm", "aarch64"]],
+    "name": "communication-utilities-arm-deb",
+    "keywords": [["communication"], ["arm", "aarch64"]],
     "github_release": {
       "repo": "autonomous-group/communication_utilities",
       "asset_keywords": [["aarch64", "arm64"], [".deb"]]
