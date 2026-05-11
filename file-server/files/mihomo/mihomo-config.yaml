@@ -1,0 +1,437 @@
+def-tun-stack: &tun-stack gvisor  # system/gvisor/mixed
+
+def-for-proxy-provider:
+  speedtest: &speedtest
+    url: "https://www.gstatic.com/generate_204"
+    expected-status: 204
+    interval: 0 # check interval in seconds, set to 0 to disable auto check
+    timeout: 5000 # timeout in milliseconds
+    tolerance: 30 # only for url-test proxy groups
+    lazy: true
+
+  sub-provider-common: &sub-provider-common
+    type: http
+    interval: 0 # update time in seconds, set to 0 to disable auto update
+    size-limit: 0
+    header:
+      User-Agent:
+        - clash.meta
+      Accept:
+        - "text/yaml,application/yaml,text/plain,*/*"
+    health-check:
+        enable: true
+        <<: *speedtest
+
+proxy-providers:
+  sub:
+    <<: *sub-provider-common
+    path: ./proxy-providers/sub.yaml
+    url: "https://api-huacloud.dev/sub?target=clash&insert=true&emoji=true&udp=true&clash.doh=true&new_name=true&filename=Flower_Trojan.yaml&url=https%3A%2F%2Fapi.xmancdn.com%2Fosubscribe.php%3Ftoken2%3Dq2xz2r4q-d3f02b93e28rta9b2j"
+    proxy: DIRECT
+  ktm:
+    <<: *sub-provider-common
+    path: ./proxy-providers/ktm.yaml
+    url: "https://ktm001.cc/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
+    proxy: DIRECT
+    override:
+      additional-prefix: "ktm |"
+  ktm2:
+    <<: *sub-provider-common
+    path: ./proxy-providers/ktm2.yaml
+    url: "https://ktm001.cc/api/v1/client/subscribe?token=e080765b250cf73d2b2cf8d94a36549f"
+    proxy: DIRECT
+    override:
+      additional-prefix: "ktm2 |"
+  one:
+    <<: *sub-provider-common
+    path: ./proxy-providers/one.yaml
+    url: "https://sub1.smallstrawberry.com/api/v1/client/subscribe?token=d133994ffb2255365d1da23d0960525f"
+    proxy: DIRECT
+    override:
+      additional-prefix: "one |"
+
+
+# --------------------------------------------------------------
+# Common Global Settings
+mixed-port: 7890
+mode: rule
+log-level: warning # silent, error, warning, info, debug
+allow-lan: true
+bind-address: "*"
+ipv6: true
+find-process-mode: off
+unified-delay: true
+tcp-concurrent: true
+global-ua: clash.meta
+# global-ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+etag-support: true
+authentication:
+  - "mihomo:mihomomo"
+skip-auth-prefixes:
+- 127.0.0.1/8
+- ::1/128
+
+keep-alive-interval: 15
+keep-alive-idle: 15
+disable-keep-alive: false # set to true on mobile devices to save battery
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+# --------------------------------------------------------------
+
+
+# --------------------------------------------------------------
+# Web Dashboard Settings
+external-controller: 0.0.0.0:9090
+external-ui: ui
+external-ui-url: "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip"
+
+external-controller-cors:
+  allow-origins:
+    - '*'
+  allow-private-network: true
+secret: "mihomomo"
+# --------------------------------------------------------------
+
+
+hosts:
+  'dns.google': 
+    - 8.8.8.8
+    - 8.8.4.4
+  'cloudflare-dns.com': 
+    - 1.1.1.1
+    - 1.0.0.1
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+
+  cache-algorithm: arc
+  prefer-h3: false
+
+  use-hosts: true
+  use-system-hosts: true
+  respect-rules: false
+
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  fake-ip-filter:
+    - '*.lan'
+    - '*.localdomain'
+    - '*.localhost'
+    - '*.local'
+    # - 'geosite:cn'
+    # - 'geosite:private'
+    - "rule-set:private_domain"
+    - 'msftconnecttest.com'
+    - 'msftncsi.com'
+    - 'xbox.*.microsoft.com'
+    - 'xbox.*.xboxlive.com'
+    - "stun.*"
+    - "*.stun.*"
+    - "turn.*"
+    - "*.turn.*"
+    - '104.129.51.144'
+    - 'sshawn9.com'
+    - '*.sshawn9.com'
+
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  direct-nameserver:
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+  direct-nameserver-follow-policy: true
+  nameserver:
+    - https://cloudflare-dns.com/dns-query#RULES
+    - https://dns.google/dns-query#RULES
+  nameserver-policy:
+    "+.arpa": system
+    "rule-set:private_domain": system
+    "rule-set:cn_domain":
+      - https://doh.pub/dns-query
+      - https://dns.alidns.com/dns-query
+    # "geosite:private": 
+    #   - system
+    # "geosite:cn":
+    #   - https://doh.pub/dns-query
+    #   - https://dns.alidns.com/dns-query
+    # "geosite:gfw,geolocation-!cn":
+    #   - https://cloudflare-dns.com/dns-query#RULES
+    #   - https://dns.google/dns-query#RULES
+
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  override-destination: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - "+.apple.com"
+
+tun:
+  enable: true
+  stack: *tun-stack
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+  strict-route: false
+  dns-hijack:
+    - any:53
+    - tcp://any:53
+  gso: true
+  gso-max-size: 65536
+  endpoint-independent-nat: true
+  route-exclude-address:
+    - 192.168.0.0/16
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 169.254.0.0/16
+
+
+def-common-select: &common-select
+  type: select
+  proxies:
+    - Proxy
+    - Vip
+    - Cheap
+    - DIRECT
+    - REJECT
+  include-all: true
+
+proxy-groups:
+  # Proxy
+  - name: Proxy
+    type: select
+    include-all: true
+
+  # Vip
+  - name: Vip
+    type: select
+    include-all: true
+
+  # Cheap
+  - name: Cheap
+    type: select
+    include-all: true
+
+  # AI
+  - name: AI
+    <<: *common-select
+
+  # Google
+  - name: Google
+    <<: *common-select
+
+  # Github
+  - name: GitHub
+    <<: *common-select
+
+  # Docker
+  - name: Docker
+    <<: *common-select
+
+  # Youtube
+  - name: YouTube
+    <<: *common-select
+
+  # Twitter
+  - name: Twitter
+    <<: *common-select
+
+  # Telegram
+  - name: Telegram
+    <<: *common-select
+
+  # Adobe
+  - name: Adobe
+    <<: *common-select
+
+
+# -------------------------------------------------------------------------
+# Rules based on Rule-Provider
+rule-anchor:
+  ip: &ip       { type: http, interval: 86400, behavior: ipcidr, format: mrs, proxy: Proxy }
+  domain: &domain { type: http, interval: 86400, behavior: domain, format: mrs, proxy: Proxy }
+rule-providers:
+  # = GEOIP,private
+  private_ip:
+    <<: *ip
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
+    path: ./ruleset/private_ip.mrs
+
+  # = GEOIP,CN
+  cn_ip:
+    <<: *ip
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
+    path: ./ruleset/cn_ip.mrs
+
+  # = GEOIP,google
+  google_ip:
+    <<: *ip
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"
+    path: ./ruleset/google_ip.mrs
+
+  # = GEOIP,telegram
+  telegram_ip:
+    <<: *ip
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"
+    path: ./ruleset/telegram_ip.mrs
+
+  # = GEOIP,twitter
+  twitter_ip:
+    <<: *ip
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/twitter.mrs"
+    path: ./ruleset/twitter_ip.mrs
+
+  # = GEOSITE,PRIVATE
+  private_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
+    path: ./ruleset/private_domain.mrs
+
+  # = GEOSITE,openai
+  openai_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"
+    path: ./ruleset/openai_domain.mrs
+
+  # = GEOSITE,google-gemini
+  gemini_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google-gemini.mrs"
+    path: ./ruleset/gemini_domain.mrs
+
+  # = GEOSITE,anthropic
+  anthropic_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/anthropic.mrs"
+    path: ./ruleset/anthropic_domain.mrs
+
+  # = GEOSITE,category-ai-!cn
+  ai_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"
+    path: ./ruleset/ai_domain.mrs
+
+  # = GEOSITE,category-ai-chat-!cn
+  ai_chat_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-chat-!cn.mrs"
+    path: ./ruleset/ai_chat_domain.mrs
+
+  # = GEOSITE,github
+  github_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"
+    path: ./ruleset/github_domain.mrs
+
+  # = GEOSITE,docker
+  docker_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/docker.mrs"
+    path: ./ruleset/docker_domain.mrs
+
+  # = GEOSITE,twitter
+  twitter_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitter.mrs"
+    path: ./ruleset/twitter_domain.mrs
+
+  # = GEOSITE,youtube
+  youtube_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
+    path: ./ruleset/youtube_domain.mrs
+
+  # = GEOSITE,google
+  google_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
+    path: ./ruleset/google_domain.mrs
+
+  # = GEOSITE,telegram
+  telegram_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"
+    path: ./ruleset/telegram_domain.mrs
+
+  # = GEOSITE,adobe
+  adobe_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/adobe.mrs"
+    path: ./ruleset/adobe_domain.mrs
+
+  # = GEOSITE,CN
+  cn_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
+    path: ./ruleset/cn_domain.mrs
+
+  # = GEOSITE,gfw
+  gfw_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"
+    path: ./ruleset/gfw_domain.mrs
+
+  # = GEOSITE,geolocation-!cn
+  geolocation-!cn:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
+    path: ./ruleset/geolocation-!cn.mrs
+
+rules:
+  - RULE-SET,private_ip,DIRECT,no-resolve
+  - RULE-SET,private_domain,DIRECT
+  
+  - IP-CIDR,104.129.51.144/32,DIRECT
+  - DOMAIN-SUFFIX,sshawn9.com,DIRECT
+
+  # AI Services
+  - RULE-SET,openai_domain,AI
+  - RULE-SET,gemini_domain,AI
+  - RULE-SET,anthropic_domain,AI
+  - RULE-SET,ai_domain,AI
+  - RULE-SET,ai_chat_domain,AI
+
+  # Common Services
+  - RULE-SET,github_domain,GitHub
+  - RULE-SET,docker_domain,Docker
+  - RULE-SET,twitter_domain,Twitter
+  - RULE-SET,youtube_domain,YouTube
+  - RULE-SET,google_domain,Google
+  - RULE-SET,telegram_domain,Telegram
+  - RULE-SET,adobe_domain,Adobe
+
+  # Bypass China Traffic
+  - RULE-SET,cn_domain,DIRECT
+
+  # STUN/TURN Servers
+  # - DST-PORT,3478,DIRECT
+  # - DST-PORT,5349,DIRECT
+
+  # GFW List
+  - RULE-SET,gfw_domain,Proxy
+  - RULE-SET,geolocation-!cn,Proxy
+
+  - RULE-SET,google_ip,Google,no-resolve
+  - RULE-SET,telegram_ip,Telegram,no-resolve
+  - RULE-SET,twitter_ip,Twitter,no-resolve
+
+  - RULE-SET,cn_ip,DIRECT,no-resolve
+
+  - MATCH,Proxy
+
+# -------------------------------------------------------------------------
