@@ -23,32 +23,27 @@ def-for-proxy-provider:
         <<: *speedtest
 
 proxy-providers:
-  sub:
-    <<: *sub-provider-common
-    path: ./proxy-providers/sub.yaml
-    url: "https://api-huacloud.dev/sub?target=clash&insert=true&emoji=true&udp=true&clash.doh=true&new_name=true&filename=Flower_Trojan.yaml&url=https%3A%2F%2Fapi.xmancdn.com%2Fosubscribe.php%3Ftoken2%3Dq2xz2r4q-d3f02b93e28rta9b2j"
-    proxy: DIRECT
   ktm:
     <<: *sub-provider-common
     path: ./proxy-providers/ktm.yaml
     url: "https://ktm001.cc/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
     proxy: DIRECT
-    override:
-      additional-prefix: "ktm |"
+    # override:
+    #   additional-prefix: "ktm |"
   ktm2:
     <<: *sub-provider-common
     path: ./proxy-providers/ktm2.yaml
     url: "https://ktm001.cc/api/v1/client/subscribe?token=e080765b250cf73d2b2cf8d94a36549f"
     proxy: DIRECT
-    override:
-      additional-prefix: "ktm2 |"
+    # override:
+    #   additional-prefix: "ktm2 |"
   one:
     <<: *sub-provider-common
     path: ./proxy-providers/one.yaml
     url: "https://sub1.smallstrawberry.com/api/v1/client/subscribe?token=d133994ffb2255365d1da23d0960525f"
     proxy: DIRECT
-    override:
-      additional-prefix: "one |"
+    # override:
+    #   additional-prefix: "one |"
 
 
 # --------------------------------------------------------------
