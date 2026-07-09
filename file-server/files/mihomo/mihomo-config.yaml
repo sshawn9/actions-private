@@ -132,7 +132,6 @@ dns:
     - '104.129.51.144'
     - 'sshawn9.com'
     - '*.sshawn9.com'
-    - "rule-set:tencent_domain"
 
   default-nameserver:
     - 223.5.5.5
@@ -150,9 +149,6 @@ dns:
   nameserver-policy:
     "+.arpa": system
     "rule-set:private_domain": system
-    "rule-set:tencent_domain":
-      - https://doh.pub/dns-query
-      - https://dns.alidns.com/dns-query
     "rule-set:cn_domain":
       - https://doh.pub/dns-query
       - https://dns.alidns.com/dns-query
