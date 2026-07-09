@@ -387,17 +387,9 @@ rule-providers:
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
     path: ./ruleset/geolocation-!cn.mrs
 
-  # = GEOSITE,tencent
-  tencent_domain:
-    <<: *domain
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tencent.mrs"
-    path: ./ruleset/tencent_domain.mrs
-
 rules:
   - RULE-SET,private_ip,DIRECT,no-resolve
   - RULE-SET,private_domain,DIRECT
-
-  - RULE-SET,tencent_domain,DIRECT
   
   - IP-CIDR,104.129.51.144/32,DIRECT
   - DOMAIN-SUFFIX,sshawn9.com,DIRECT
