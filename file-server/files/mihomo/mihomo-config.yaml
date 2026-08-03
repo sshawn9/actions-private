@@ -26,7 +26,7 @@ proxy-providers:
   ktm:
     <<: *sub-provider-common
     path: ./proxy-providers/ktm.yaml
-    url: "https://ktm001.one/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
+    url: "https://kutumu.top/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
     proxy: DIRECT
     override:
       additional-prefix: "ktm |"
