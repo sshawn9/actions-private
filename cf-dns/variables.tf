@@ -1,32 +1,9 @@
 variable "zone_id" {
-  type = string
-}
-
-variable "servers" {
-  type        = map(string)
-  description = "Server name -> public IP"
-}
-
-variable "dns_records" {
-  type = map(object({
-    server  = string
-    type    = optional(string, "A")
-    proxied = optional(bool, true)
-  }))
-  description = "Subdomain -> { server, type, proxied }"
-}
-
-variable "ssl_mode" {
   type        = string
-  description = "SSL/TLS mode: off, flexible, full, strict"
-  default     = "flexible"
-}
+  description = "Cloudflare zone ID for sshawn9.com"
 
-variable "origin_rules" {
-  type = map(object({
-    hostname = string
-    port     = number
-  }))
-  description = "Rule description -> { hostname, port }"
-  default     = {}
+  validation {
+    condition     = can(regex("^[0-9a-f]{32}$", var.zone_id))
+    error_message = "zone_id must be a 32-character lowercase hexadecimal Cloudflare zone ID."
+  }
 }

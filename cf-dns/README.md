@@ -1,175 +1,162 @@
 # cf-dns
 
-Terraform-managed Cloudflare DNS records, Origin Rules, and SSL/TLS settings for the `sshawn9.com` zone. All config lives in `terraform.tfvars` — edit, push to `main`, and GitHub Actions runs `terraform apply` automatically.
+Terraform-managed Cloudflare configuration for the `sshawn9.com` zone.
 
-## Usage
+The configuration uses explicit Cloudflare provider resources rather than a
+custom `terraform.tfvars` abstraction. This keeps rule ordering visible and
+makes Terraform state addresses correspond directly to Cloudflare resources.
 
-All configuration changes are made by editing `terraform.tfvars` and pushing to the `main` branch. The CI pipeline handles `terraform init` and `terraform apply`.
+## Managed resources
 
-For manual operations (rarely needed):
+### DNS records
 
-```bash
-cd cf-dns
-export CLOUDFLARE_API_TOKEN="your-token"
-terraform init
-terraform plan    # Preview changes
-terraform apply   # Apply changes
-```
+| Hostname | Type | Content | Proxied | Purpose |
+|---|---|---|:---:|---|
+| `easytier.sshawn9.com` | A | `104.129.51.144` | Yes | EasyTier web panel |
+| `et-config.sshawn9.com` | A | `104.129.51.144` | Yes | EasyTier config server |
+| `www.sshawn9.com` | A | `192.0.2.1` | Yes | Originless hostname for the canonical redirect |
 
-## Current Configuration
+`192.0.2.1` is a reserved documentation address recommended by Cloudflare for
+originless hostnames. Because the record is proxied, the Single Redirect rule
+runs at Cloudflare's edge and no connection is made to that address.
 
-### DNS Records
+Worker custom domains such as `file.sshawn9.com`, `match.sshawn9.com`, and
+`dl.sshawn9.com` are created and managed by Cloudflare Workers, not Terraform.
 
-| Subdomain | Type | Server | IP Address | Proxied | Purpose |
-|-----------|------|--------|------------|:-------:|---------|
-| `easytier` | A | rn-2c | 104.129.51.144 | Yes | EasyTier web panel |
-| `et-config` | A | rn-2c | 104.129.51.144 | Yes | EasyTier config server |
+### Single Redirects
 
-**Note:** Worker custom domains (`file.sshawn9.com`, `match.sshawn9.com`, `dl.sshawn9.com`) are **not** managed here — Cloudflare Workers automatically create and manage DNS records for `custom_domain` routes defined in `wrangler.toml`.
+`www.sshawn9.com` permanently redirects to `https://sshawn9.com` with:
+
+- HTTP status `308`, preserving the original HTTP method.
+- The original request path.
+- The original query string.
+
+For example, `http://www.sshawn9.com/a?x=1` becomes
+`https://sshawn9.com/a?x=1`.
+
+All zone-level Single Redirect rules must be kept in the ordered `rules` list
+of `cloudflare_ruleset.single_redirects`. Cloudflare permits only one zone
+entry-point ruleset for this phase, and the first matching redirect wins.
 
 ### Origin Rules
 
-| Description | Hostname | Destination Port |
-|-------------|----------|:----------------:|
-| EasyTier Web panel | `easytier.sshawn9.com` | 11212 |
-| EasyTier Config server | `et-config.sshawn9.com` | 22020 |
+| Hostname | Destination port |
+|---|---:|
+| `easytier.sshawn9.com` | 11212 |
+| `et-config.sshawn9.com` | 22020 |
 
-Origin Rules override the destination port for proxied requests. Without these rules, Cloudflare forwards traffic to port 80/443 on the origin. Not needed for `proxied = false` records — clients connect to `IP:port` directly.
+### Zone settings
 
-### Servers
+The zone-wide SSL/TLS mode is `flexible`. Changing it to `full` or `strict`
+requires compatible TLS certificates on every affected origin.
 
-| Alias | IP Address |
-|-------|------------|
-| rn-2c | 104.129.51.144 |
-
-Server aliases allow DNS records to reference servers by name. Changing an IP in `servers` automatically updates all records pointing to that alias.
-
-### SSL/TLS Mode
-
-Current mode: **flexible**
-
-| Mode | Description |
-|------|-------------|
-| `off` | No encryption |
-| `flexible` | Encrypted client-to-Cloudflare, **plaintext** Cloudflare-to-origin (no cert needed on origin) |
-| `full` | Encrypted end-to-end (origin needs a cert, self-signed OK) |
-| `strict` | Encrypted end-to-end (origin needs a valid/trusted cert) |
-
-This is a zone-wide setting (applies to all subdomains).
-
-## Configuration Files
-
-### terraform.tfvars
-
-This is the **only file you need to edit** for configuration changes:
-
-```hcl
-zone_id  = "2cbfbc36ae05bc041b712442e2f7b584"
-ssl_mode = "flexible"
-
-servers = {
-  rn-2c = "104.129.51.144"
-}
-
-dns_records = {
-  easytier  = { server = "rn-2c" }
-  et-config = { server = "rn-2c" }
-}
-
-origin_rules = {
-  "EasyTier Web panel"     = { hostname = "easytier.sshawn9.com",  port = 11212 }
-  "EasyTier Config server" = { hostname = "et-config.sshawn9.com", port = 22020 }
-}
-```
-
-### Terraform Files
+## File layout
 
 | File | Purpose |
-|------|---------|
-| `main.tf` | Provider configuration (Cloudflare provider v4.x, reads `CLOUDFLARE_API_TOKEN` from env) |
-| `variables.tf` | Variable definitions with types, defaults, and descriptions |
-| `dns.tf` | `cloudflare_record` resource — creates DNS records from `dns_records` map |
-| `rules.tf` | `cloudflare_ruleset` resource — creates Origin Rules from `origin_rules` map |
-| `zone.tf` | `cloudflare_zone_settings_override` resource — sets SSL/TLS mode |
-| `terraform.tfstate` | Terraform state file (auto-managed by CI, do not edit manually) |
+|---|---|
+| `backend.tf` | Cloudflare R2 remote-state backend |
+| `main.tf` | Terraform and Cloudflare provider versions |
+| `variables.tf` | Deployment inputs |
+| `terraform.tfvars` | The zone ID only |
+| `dns.tf` | Explicit DNS record resources |
+| `rules.tf` | Ordered Origin Rules and Single Redirects rulesets |
+| `zone.tf` | Individual zone settings |
+| `migrations.tf` | State-preserving provider v4 to v5 migration declarations |
 
-## Adding a DNS Record
+## Versions
 
-1. If the server IP is new, add it to `servers`:
-   ```hcl
-   servers = {
-     rn-2c    = "104.129.51.144"
-     new-srv  = "203.0.113.50"
-   }
-   ```
+- Terraform: `>= 1.8, < 2.0` (`1.15.8` in GitHub Actions)
+- Cloudflare provider: `5.23.0`
 
-2. Add the DNS record to `dns_records`:
-   ```hcl
-   dns_records = {
-     easytier  = { server = "rn-2c" }
-     myapp     = { server = "new-srv" }
-     myapi     = { server = "new-srv", type = "A", proxied = false }
-   }
-   ```
+The committed `.terraform.lock.hcl` pins the provider package and checksums.
+Provider upgrades should be made intentionally in a separate change.
 
-   | Parameter | Required | Default | Description |
-   |-----------|----------|---------|-------------|
-   | `server` | Yes | — | Name from `servers` map |
-   | `type` | No | `"A"` | DNS record type |
-   | `proxied` | No | `true` | Route through Cloudflare proxy (orange cloud) |
+## Authentication and permissions
 
-3. If the origin uses a non-standard port (not 80/443), add an Origin Rule:
-   ```hcl
-   origin_rules = {
-     "My App" = { hostname = "myapp.sshawn9.com", port = 8080 }
-   }
-   ```
+The Cloudflare provider and R2 backend share one account-owned `cfat_` token
+from `CLOUDFLARE_API_TOKEN`. It needs:
 
-4. Push to `main` — CI runs `terraform apply` automatically
+- Zone DNS Edit
+- Zone Settings Edit
+- Zone Origin Rules Edit
+- Zone Single Redirect Edit
+- R2 Object Read and Write, scoped to the Terraform state bucket when possible
 
-### Other Common Operations
+The workflow discovers the account through the Accounts API and retrieves the
+account token ID from the Account Token Verify API. For the R2 S3 backend it
+uses the token ID as the access key ID and the SHA-256 digest of the token value
+as the secret access key. Neither the account ID nor separate R2 credentials
+need to be configured. The token must expose exactly one Cloudflare account.
 
-**Migrate services to another server** — change the `server` value:
-```hcl
-easytier = { server = "us1" }   # was rn-2c
+## GitHub configuration
+
+Configure this Actions secret:
+
+| Secret | Purpose |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | Account-owned `cfat_` token for zone resources and R2 state |
+
+Pull requests run formatting, validation, and plan. Pushes to `main` run the
+same checks and apply the saved plan. Workflow concurrency serializes all
+operations for this state.
+
+## One-time remote-state migration
+
+The R2 bucket must exist and the `cfat_` token must have access to it before
+enabling the new workflow. Its fixed name is `sshawn9-terraform-state`, as
+declared in `backend.tf`. For local migration, derive the backend credentials
+from the same token:
+
+```bash
+export CLOUDFLARE_API_TOKEN="<cfat_ account token>"
+
+ACCOUNT_ID="$(curl --fail-with-body --silent --show-error \
+  "https://api.cloudflare.com/client/v4/accounts" \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | \
+  jq -er 'if .success == true and (.result | length) == 1 then .result[0].id else error("expected one account") end')"
+
+export AWS_ACCESS_KEY_ID="$(curl --fail-with-body --silent --show-error \
+  "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/tokens/verify" \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | \
+  jq -er 'if .success == true and .result.status == "active" then .result.id else error("token is not active") end')"
+export AWS_SECRET_ACCESS_KEY="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1)"
+export AWS_ENDPOINT_URL_S3="https://$ACCOUNT_ID.r2.cloudflarestorage.com"
 ```
 
-**Change a server IP** — update one value in `servers`, all referencing records follow:
-```hcl
-servers = {
-  rn-2c = "9.8.7.6"   # new IP
-}
+Either run the `Terraform Cloudflare DNS` workflow manually with
+`migrate_state=true`, or copy the currently committed local state into R2 from
+this directory:
+
+```bash
+terraform init -migrate-state -force-copy
+
+terraform state list
 ```
 
-**Delete a record** — remove the line from `dns_records` or `origin_rules`. Terraform deletes it from Cloudflare on next apply.
+Verify that the remote state contains the existing DNS records and Origin
+Rules before deleting the tracked `terraform.tfstate` file. Its final removal
+must only be committed after the R2 copy has been verified. Normal CI runs are
+intentionally blocked while the bootstrap state remains tracked.
 
-## SSL/TLS Mode
+The provider v5 migration deliberately removes the legacy aggregate
+`cloudflare_zone_settings_override.ssl` address from local state. On the first
+authenticated plan/apply, `migrations.tf` imports the existing `ssl` setting as
+`cloudflare_zone_setting.ssl`; it does not recreate or reset the remote value.
 
-To change the SSL/TLS mode:
-```hcl
-ssl_mode = "full"
+## Local workflow after migration
+
+```bash
+export CLOUDFLARE_API_TOKEN="<Cloudflare API token>"
+
+# Derive AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_ENDPOINT_URL_S3
+# from the cfat_ token as shown in One-time remote-state migration above.
+
+terraform init
+terraform fmt -check -recursive
+terraform validate
+terraform plan
 ```
 
-**Important:** Switching to `full` or `strict` requires a valid SSL certificate on the origin server.
-
-## State Management
-
-Terraform state (`terraform.tfstate`) is committed directly to this git repository. After each `terraform apply`, the CI pipeline automatically commits the updated state file with the message `"Update Terraform state"`.
-
-- State is versioned alongside configuration
-- No external state backend required
-- Pull before making local changes to avoid state conflicts
-- The CI job has `contents: write` permission to push state updates
-
-## Notes
-
-- **Origin Rules are managed as a whole ruleset.** If you have manually created Origin Rules in the Cloudflare dashboard, add them to `terraform.tfvars` or they will be overwritten. DNS records do not have this problem — Terraform only touches records it manages.
-- **Importing existing records:** If a DNS record already exists in Cloudflare, `terraform apply` will fail with a conflict. Either delete the existing record from the dashboard first, or use a Terraform import block:
-  ```hcl
-  import {
-    to = cloudflare_record.dns["easytier"]
-    id = "<zone_id>/<record_id>"
-  }
-  ```
-  Run apply once, then remove the import block.
-- **API Token permissions required:** Zone DNS Edit + Zone Rulesets Edit + Zone Settings Edit.
+Do not create or edit DNS records, zone settings, Origin Rules, or Single
+Redirects in the Cloudflare dashboard. Import any existing resource before
+adding it to this configuration so Terraform remains its sole owner.

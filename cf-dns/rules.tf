@@ -1,23 +1,61 @@
 resource "cloudflare_ruleset" "origin_rules" {
-  count = length(var.origin_rules) > 0 ? 1 : 0
+  zone_id     = var.zone_id
+  name        = "Origin port overrides"
+  description = "Route proxied service hostnames to non-standard origin ports"
+  kind        = "zone"
+  phase       = "http_request_origin"
 
-  zone_id = var.zone_id
-  name    = "Origin port overrides"
-  kind    = "zone"
-  phase   = "http_request_origin"
-
-  dynamic "rules" {
-    for_each = var.origin_rules
-    content {
-      action = "route"
-      action_parameters {
-        origin {
-          port = rules.value.port
+  rules = [
+    {
+      ref         = "easytier_config_server"
+      description = "EasyTier Config server"
+      expression  = "(http.host eq \"et-config.sshawn9.com\")"
+      action      = "route"
+      enabled     = true
+      action_parameters = {
+        origin = {
+          port = 22020
         }
       }
-      expression  = "(http.host eq \"${rules.value.hostname}\")"
-      description = rules.key
+    },
+    {
+      ref         = "easytier_web_panel"
+      description = "EasyTier Web panel"
+      expression  = "(http.host eq \"easytier.sshawn9.com\")"
+      action      = "route"
       enabled     = true
-    }
-  }
+      action_parameters = {
+        origin = {
+          port = 11212
+        }
+      }
+    },
+  ]
+}
+
+resource "cloudflare_ruleset" "single_redirects" {
+  zone_id     = var.zone_id
+  name        = "Single Redirects"
+  description = "Canonical hostname redirects"
+  kind        = "zone"
+  phase       = "http_request_dynamic_redirect"
+
+  rules = [
+    {
+      ref         = "redirect_www_to_apex"
+      description = "Redirect www.sshawn9.com to sshawn9.com"
+      expression  = "(http.host eq \"www.sshawn9.com\")"
+      action      = "redirect"
+      enabled     = true
+      action_parameters = {
+        from_value = {
+          status_code           = 308
+          preserve_query_string = true
+          target_url = {
+            expression = "concat(\"https://sshawn9.com\", http.request.uri.path)"
+          }
+        }
+      }
+    },
+  ]
 }

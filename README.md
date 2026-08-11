@@ -20,7 +20,7 @@ Infrastructure-as-code repository for the **sshawn9.com** domain ecosystem, powe
         (files + config        (latest asset)     External Domains
           injection)                                (with auth)
 
-  DNS & Origin Rules managed by Terraform (cf-dns/)
+  DNS, Redirect Rules, Origin Rules, and zone settings managed by Terraform (cf-dns/)
 ```
 
 ## Services
@@ -30,13 +30,13 @@ Infrastructure-as-code repository for the **sshawn9.com** domain ecosystem, powe
 | **file-server** | `file.sshawn9.com/<name>` | Path-based file server with config injection and fuzzy matching | `file-server/` |
 | **match** | `match.sshawn9.com/<keywords>` | Keyword-matching download router, auto-resolves latest GitHub release assets | `match/` |
 | **dl-proxy** | `dl.sshawn9.com/<domain>/<path>?token=xxx` | Authenticated download proxy for whitelisted domains | `dl-proxy/` |
-| **cf-dns** | N/A | Terraform-managed DNS records, Origin Rules, SSL/TLS settings | `cf-dns/` |
+| **cf-dns** | N/A | Terraform-managed DNS, Redirect Rules, Origin Rules, and SSL/TLS settings | `cf-dns/` |
 
 ## Tech Stack
 
 - **Runtime**: Cloudflare Workers (TypeScript)
 - **Build & Deploy**: Wrangler v4
-- **DNS & Infrastructure**: Terraform with Cloudflare Provider v4.x
+- **DNS & Infrastructure**: Terraform with Cloudflare Provider v5.23.0 and R2 remote state
 - **CI/CD**: GitHub Actions (auto-deploy on push to `main`)
 - **Node.js**: v24
 
@@ -59,9 +59,9 @@ actions-private/
 │           ├── index.ts  #   Worker logic
 │           └── config.ts #   Tokens & domain whitelist
 ├── cf-dns/               # Terraform DNS management
-│   ├── terraform.tfvars  #   All config: servers, DNS, rules
-│   ├── *.tf              #   Terraform definitions
-│   └── terraform.tfstate #   State (git-managed)
+│   ├── terraform.tfvars  #   Cloudflare zone ID
+│   ├── backend.tf        #   R2 remote-state backend
+│   └── *.tf              #   Explicit Terraform resources
 ├── shared/               # Shared configuration files
 │   └── *.conf            #   KEY=VALUE files for template injection
 └── .github/workflows/    # CI/CD pipelines
@@ -80,7 +80,7 @@ All services auto-deploy when changes are pushed to the `main` branch:
 | file-server | `file-server/worker/**` | `npx wrangler deploy` |
 | match | `match/**` | `npx wrangler deploy` |
 | dl-proxy | `dl-proxy/worker/**` | `npx wrangler deploy` |
-| cf-dns | `cf-dns/**` | `terraform apply` (state auto-committed) |
+| cf-dns | `cf-dns/**` | Pull request plan; serialized apply on `main` using R2 remote state |
 
 All workflows also support manual trigger via `workflow_dispatch`.
 
@@ -90,8 +90,12 @@ Configure these in GitHub repository settings under **Settings > Secrets and var
 
 | Secret | Used By | Purpose |
 |--------|---------|---------|
-| `CLOUDFLARE_API_TOKEN` | All services | Cloudflare API authentication for Workers deployment and Terraform |
+| `CLOUDFLARE_API_TOKEN` | All services | Account-owned `cfat_` token for Workers, Terraform, and R2 state |
 | `GH_PAT` | file-server, match, dl-proxy | GitHub Personal Access Token, injected as `GITHUB_TOKEN` Worker secret for private repo access |
+
+The `cf-dns` workflow derives the Cloudflare account ID and R2 S3 credentials
+from the account-owned token. Its state bucket name,
+`sshawn9-terraform-state`, is fixed in `cf-dns/backend.tf`.
 
 ## Shared Configuration
 

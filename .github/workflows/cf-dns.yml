@@ -1,45 +1,134 @@
-name: Apply Cloudflare DNS
+name: Terraform Cloudflare DNS
 
 on:
   workflow_dispatch:
+    inputs:
+      migrate_state:
+        description: Copy the committed bootstrap state to R2, then stop
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+    paths:
+      - "cf-dns/**"
+      - ".github/workflows/cf-dns.yml"
   push:
     branches: [main]
     paths:
       - "cf-dns/**"
+      - ".github/workflows/cf-dns.yml"
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: terraform-cf-dns
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
 jobs:
-  apply:
+  terraform:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: cf-dns
+
     steps:
       - uses: actions/checkout@v6
 
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
 
-      - run: terraform init
-
-      - id: apply
-        run: terraform apply -auto-approve
-        continue-on-error: true
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-
-      - name: Commit state
-        if: always()
+      - name: Verify required configuration
         run: |
-          cd "$GITHUB_WORKSPACE"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add cf-dns/terraform.tfstate
-          git diff --cached --quiet && exit 0
-          git commit -m "Update Terraform state"
-          git push
+          test -n "$CLOUDFLARE_API_TOKEN"
+          case "$CLOUDFLARE_API_TOKEN" in
+            cfat_*) ;;
+            *) echo "CLOUDFLARE_API_TOKEN must be an account-owned cfat_ token"; exit 1 ;;
+          esac
 
-      - name: Fail if apply failed
-        if: steps.apply.outcome == 'failure'
-        run: exit 1
+      - name: Derive account and R2 credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          accounts_response="$(
+            curl --fail-with-body --silent --show-error --retry 3 \
+              "https://api.cloudflare.com/client/v4/accounts" \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          )"
+          account_id="$(
+            jq -er '
+              if .success == true and (.result | length) == 1 then
+                .result[0].id | select(test("^[0-9a-f]{32}$"))
+              else
+                error("cfat_ token must expose exactly one Cloudflare account")
+              end
+            ' <<<"$accounts_response"
+          )"
+
+          token_response="$(
+            curl --fail-with-body --silent --show-error --retry 3 \
+              "https://api.cloudflare.com/client/v4/accounts/$account_id/tokens/verify" \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          )"
+          access_key_id="$(
+            jq -er '
+              if .success == true and .result.status == "active" then
+                .result.id | select(test("^[0-9a-f]{32}$"))
+              else
+                error("cfat_ token is not active")
+              end
+            ' <<<"$token_response"
+          )"
+          secret_access_key="$(
+            printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1
+          )"
+
+          echo "::add-mask::$access_key_id"
+          echo "::add-mask::$secret_access_key"
+          {
+            echo "AWS_ACCESS_KEY_ID=$access_key_id"
+            echo "AWS_SECRET_ACCESS_KEY=$secret_access_key"
+            echo "AWS_ENDPOINT_URL_S3=https://$account_id.r2.cloudflarestorage.com"
+          } >> "$GITHUB_ENV"
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Migrate committed state to R2
+        if: github.event_name == 'workflow_dispatch' && inputs.migrate_state
+        run: terraform init -input=false -migrate-state -force-copy
+
+      - name: Verify migrated remote state
+        if: github.event_name == 'workflow_dispatch' && inputs.migrate_state
+        run: terraform state list
+
+      - name: Require the one-time state migration
+        if: github.event_name != 'workflow_dispatch' || !inputs.migrate_state
+        run: |
+          if test -f terraform.tfstate; then
+            echo "Run this workflow manually with migrate_state=true, verify the R2 state, then remove cf-dns/terraform.tfstate."
+            exit 1
+          fi
+
+      - name: Initialize remote state
+        if: github.event_name != 'workflow_dispatch' || !inputs.migrate_state
+        run: terraform init -input=false
+
+      - name: Validate
+        if: github.event_name != 'workflow_dispatch' || !inputs.migrate_state
+        run: terraform validate -no-color
+
+      - name: Plan
+        if: github.event_name != 'workflow_dispatch' || !inputs.migrate_state
+        run: terraform plan -input=false -no-color -out=tfplan
+
+      - name: Apply
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || !inputs.migrate_state)
+        run: terraform apply -input=false -auto-approve tfplan
