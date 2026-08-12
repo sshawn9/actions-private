@@ -31,7 +31,34 @@ env:
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cf-dns
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Initialize without remote state
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate -no-color
+
   terraform:
+    needs: validate
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -99,9 +126,6 @@ jobs:
             echo "TF_VAR_account_id=$account_id"
           } >> "$GITHUB_ENV"
 
-      - name: Check formatting
-        run: terraform fmt -check -recursive
-
       - name: Migrate committed state to R2
         if: github.event_name == 'workflow_dispatch' && inputs.migrate_state
         run: terraform init -input=false -migrate-state -force-copy
@@ -121,10 +145,6 @@ jobs:
       - name: Initialize remote state
         if: github.event_name != 'workflow_dispatch' || !inputs.migrate_state
         run: terraform init -input=false
-
-      - name: Validate
-        if: github.event_name != 'workflow_dispatch' || !inputs.migrate_state
-        run: terraform validate -no-color
 
       - name: Plan
         if: github.event_name != 'workflow_dispatch' || !inputs.migrate_state
