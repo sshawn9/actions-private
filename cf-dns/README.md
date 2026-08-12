@@ -76,7 +76,7 @@ requires compatible TLS certificates on every affected origin.
 | `dns.tf` | Explicit DNS record resources |
 | `rules.tf` | Ordered Origin Rules and Single Redirects rulesets |
 | `site-access.tf` | Access application and reusable policy for website previews |
-| `site-worker.tf` | Production website custom domain and its one-time import |
+| `site-worker.tf` | Production website custom domain |
 | `zone.tf` | Individual zone settings |
 | `migrations.tf` | State-preserving provider v4 to v5 migration declarations |
 
@@ -162,20 +162,6 @@ The provider v5 migration deliberately removes the legacy aggregate
 `cloudflare_zone_settings_override.ssl` address from local state. On the first
 authenticated plan/apply, `migrations.tf` imports the existing `ssl` setting as
 `cloudflare_zone_setting.ssl`; it does not recreate or reset the remote value.
-
-## One-time website custom-domain adoption
-
-`site-worker.tf` initially looks up the existing `sshawn9.com` custom domain
-and imports it into `cloudflare_workers_custom_domain.site`. Apply this
-configuration while the existing custom-domain mapping is still live, and
-verify that the saved plan does not replace or detach it. Only after that apply
-succeeds should the website repository deploy a Wrangler configuration without
-the custom-domain route.
-
-The data source, derived domain ID, and `import` block are migration scaffolding.
-After the imported resource is visible in remote state and a subsequent plan is
-empty, remove those three blocks in a follow-up change while retaining the
-`cloudflare_workers_custom_domain.site` resource.
 
 ## Local workflow after migration
 
