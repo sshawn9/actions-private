@@ -1,114 +1,114 @@
 # dl-proxy
 
-Authenticated download proxy running on Cloudflare Workers. Proxies file downloads from whitelisted domains (primarily GitHub) via `dl.sshawn9.com`, providing access to resources that may be inaccessible in certain regions.
+运行在 Cloudflare Workers 上的认证下载代理。通过 `dl.sshawn9.com` 代理白名单域名（主要是 GitHub）的文件下载，用于访问某些地区可能无法直接获取的资源。
 
-## Usage
+## 使用方法
 
 ```bash
-# Basic download
+# 基本下载
 curl -fsSL -o easytier-gui.deb \
   "https://dl.sshawn9.com/github.com/EasyTier/EasyTier/releases/download/v2.4.5/easytier-gui_2.4.5_amd64.deb?token=xxx"
 
-# Auto-detect filename with -O (uses Content-Disposition header)
+# 使用 -O 自动识别文件名（读取 Content-Disposition 响应头）
 curl -fsSL -OJ \
   "https://dl.sshawn9.com/github.com/EasyTier/EasyTier/releases/download/v2.4.5/easytier-linux-x86_64-v2.4.5.zip?token=xxx"
 
-# Download raw file from GitHub repo
+# 从 GitHub 仓库下载原始文件
 curl -fsSL \
   "https://dl.sshawn9.com/raw.githubusercontent.com/EasyTier/EasyTier/main/README.md?token=xxx"
 
-# Bypass cache for fresh download
+# 绕过缓存并下载最新内容
 curl -fsSL -o file.deb \
   "https://dl.sshawn9.com/github.com/...?token=xxx&nocache"
 
-# Show usage info (no token needed)
+# 查看使用说明（无需 Token）
 curl https://dl.sshawn9.com/
 ```
 
-**URL format**: `https://dl.sshawn9.com/<domain>/<path>?token=<your-token>`
+**URL 格式**：`https://dl.sshawn9.com/<domain>/<path>?token=<your-token>`
 
-The `<domain>/<path>` portion is converted to `https://<domain>/<path>` and fetched by the Worker.
+Worker 会将 `<domain>/<path>` 部分转换为 `https://<domain>/<path>` 并获取对应资源。
 
-### Query Parameters
+### 查询参数
 
-| Parameter | Required | Description |
+| 参数 | 必需 | 说明 |
 |-----------|----------|-------------|
-| `token` | Yes | Authentication token (see Managing Tokens below) |
-| `nocache` | No | Skip edge cache and fetch directly from origin (presence is enough, no value needed) |
+| `token` | 是 | 认证 Token（参见下方的“管理 Token”） |
+| `nocache` | 否 | 跳过边缘缓存，直接从源站获取；只需提供该参数，无需赋值 |
 
-## Authentication
+## 身份认证
 
-Every request must include a valid `token` query parameter. Requests without a token or with an invalid token receive `403 Unauthorized`.
+每个请求都必须包含有效的 `token` 查询参数。缺少 Token 或 Token 无效时，将返回 `403 Unauthorized`。
 
-Tokens are defined in `worker/src/config.ts` as the `DL_TOKENS` array. Multiple tokens are supported, allowing different tokens for different users or purposes (e.g., private vs shared tokens).
+Token 在 `worker/src/config.ts` 的 `DL_TOKENS` 数组中定义。该数组支持多个 Token，可按用户或用途分别设置（例如私人 Token 和共享 Token）。
 
-**Security note:** Tokens are visible in the URL. Do not share full download links publicly.
+**安全提示：** Token 会显示在 URL 中，请勿公开分享完整的下载链接。
 
-## Domain Whitelist
+## 域名白名单
 
-Only requests targeting whitelisted domains are proxied. Others receive `403 Domain not allowed`.
+只有目标属于白名单域名的请求才会被代理，其他请求将返回 `403 Domain not allowed`。
 
-The whitelist is defined in `worker/src/config.ts`:
+白名单在 `worker/src/config.ts` 中定义：
 
-| Domain | Receives GitHub PAT | Description |
+| 域名 | 注入 GitHub PAT | 说明 |
 |--------|:-------------------:|-------------|
-| `github.com` | Yes | GitHub release downloads, repo pages |
-| `raw.githubusercontent.com` | Yes | Raw file content from repos |
-| `api.github.com` | Yes | GitHub API endpoints |
-| `objects.githubusercontent.com` | No | GitHub LFS and release asset storage |
-| `github-releases.githubusercontent.com` | No | GitHub release asset CDN |
+| `github.com` | 是 | GitHub Release 下载和仓库页面 |
+| `raw.githubusercontent.com` | 是 | 仓库中的原始文件内容 |
+| `api.github.com` | 是 | GitHub API 端点 |
+| `objects.githubusercontent.com` | 否 | GitHub LFS 和 Release 资源存储 |
+| `github-releases.githubusercontent.com` | 否 | GitHub Release 资源 CDN |
 
-Domains marked with "Receives GitHub PAT" automatically get an `Authorization: token <GITHUB_TOKEN>` header injected, enabling access to private repositories.
+标记为“注入 GitHub PAT”的域名会自动注入 `Authorization: token <GITHUB_TOKEN>` 请求头，从而支持访问私有仓库。
 
-Subdomain matching is supported: if `github.com` is whitelisted, `api.github.com` also passes (via `endsWith` check).
+支持子域名匹配：如果 `github.com` 在白名单中，`api.github.com` 也会通过检查（使用 `endsWith` 判断）。
 
-## Caching
+## 缓存
 
-- **Edge cache TTL**: 1 hour (`s-maxage=3600`)
-- **Cache key**: The target URL (e.g., `https://github.com/...`)
-- **Bypass**: Add `?nocache` to skip the cache and fetch from origin
-- Same target URL from different users/tokens shares the same cache entry
+- **边缘缓存 TTL**：1 小时（`s-maxage=3600`）
+- **缓存键**：目标 URL（例如 `https://github.com/...`）
+- **绕过缓存**：添加 `?nocache`，跳过缓存并从源站获取
+- 不同用户或 Token 请求相同的目标 URL 时，会共享同一缓存条目
 
-## Error Codes
+## 错误码
 
-| Status | Condition | Response Body |
+| 状态码 | 条件 | 响应正文 |
 |--------|-----------|---------------|
-| 200 | No path provided (root request) | Usage instructions |
-| 403 | Missing or invalid token | `Unauthorized.` |
-| 403 | Target domain not in whitelist | `Domain not allowed: {hostname}` |
-| 400 | Path cannot be parsed as a valid URL | `Invalid URL path.` |
-| 404 | Upstream returned 404 | `Download failed: 404 Not Found` |
-| 502 | Upstream returned other error | `Download failed: {status} {statusText}` |
+| 200 | 未提供路径（请求根路径） | 使用说明 |
+| 403 | Token 缺失或无效 | `Unauthorized.` |
+| 403 | 目标域名不在白名单中 | `Domain not allowed: {hostname}` |
+| 400 | 无法将路径解析为有效 URL | `Invalid URL path.` |
+| 404 | 上游返回 404 | `Download failed: 404 Not Found` |
+| 502 | 上游返回其他错误 | `Download failed: {status} {statusText}` |
 
-## Managing Tokens
+## 管理 Token
 
-Edit `worker/src/config.ts`:
+编辑 `worker/src/config.ts`：
 
 ```typescript
 export const DL_TOKENS: string[] = [
-  "shawn326",     // Private
-  "bit472",       // Shared
-  "c3i",          // Shared
+  "shawn326",     // 私人
+  "bit472",       // 共享
+  "c3i",          // 共享
 ];
 ```
 
-- Add a new token: append to the array
-- Revoke a token: remove from the array
-- Push to `main` to redeploy with updated tokens
+- 添加新 Token：将其追加到数组中
+- 撤销 Token：将其从数组中移除
+- 推送到 `main`，使用更新后的 Token 重新部署
 
-## Managing Domains
+## 管理域名
 
-Edit the `ALLOWED_DOMAINS` array in `worker/src/config.ts`:
+编辑 `worker/src/config.ts` 中的 `ALLOWED_DOMAINS` 数组：
 
 ```typescript
 export const ALLOWED_DOMAINS: string[] = [
   ...GITHUB_DOMAINS,
   "objects.githubusercontent.com",
   "github-releases.githubusercontent.com",
-  // Add new domains here
+  // 在此添加新域名
 ];
 ```
 
-If the new domain should receive the GitHub PAT header, also add it to `GITHUB_DOMAINS`.
+如果需要为新域名注入 GitHub PAT 请求头，还应将其添加到 `GITHUB_DOMAINS`。
 
-Push to `main` to redeploy.
+推送到 `main` 以重新部署。

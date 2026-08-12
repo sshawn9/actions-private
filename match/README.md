@@ -1,60 +1,60 @@
 # match
 
-Keyword-matching download router running on Cloudflare Workers. Routes requests to `match.sshawn9.com/<keywords>` by matching keywords in the URL path against a rule set, then proxies the corresponding file. Supports auto-resolving the latest GitHub release asset from private repositories.
+运行在 Cloudflare Workers 上的关键词匹配下载路由器。它根据规则集匹配 URL 路径中的关键词，将 `match.sshawn9.com/<keywords>` 请求路由到对应文件并进行代理，同时支持自动解析私有仓库中最新的 GitHub Release 资源。
 
-## Usage
+## 使用方法
 
 ```bash
-# Download latest motion_control deb for ARM
+# 下载适用于 ARM 的最新 motion_control deb 包
 curl -fsSL -OJ https://match.sshawn9.com/control-aarch64
 
-# Keywords can appear in any order
+# 关键词可以按任意顺序出现
 curl -fsSL -OJ https://match.sshawn9.com/aarch64-control
 
-# Download latest motion_control deb for x86
+# 下载适用于 x86 的最新 motion_control deb 包
 curl -fsSL -OJ https://match.sshawn9.com/control-x86
 
-# List all available rules
+# 列出所有可用规则
 curl https://match.sshawn9.com/
 ```
 
-No authentication required — all endpoints are publicly accessible.
+无需身份认证，所有端点均可公开访问。
 
-## Keyword Matching
+## 关键词匹配
 
-Keywords are defined as a **two-dimensional array** with AND/OR semantics:
+关键词以**二维数组**定义，并采用 AND/OR 语义：
 
-- **Outer array**: AND — every group must match
-- **Inner array**: OR — at least one keyword in the group must match
+- **外层数组**：AND，即每个分组都必须匹配
+- **内层数组**：OR，即分组中至少有一个关键词必须匹配
 
-Matching is **case-insensitive** and checks if the URL path **contains** the keyword as a substring.
+匹配**不区分大小写**，并检查 URL 路径是否以子字符串形式**包含**关键词。
 
-**Example:**
+**示例：**
 
 ```json
 "keywords": [["control"], ["x86", "amd", "amd64"]]
 ```
 
-This matches any path that contains `control` **AND** (`x86` **OR** `amd` **OR** `amd64`):
+该规则匹配任何包含 `control` **并且**包含（`x86`、`amd`、`amd64` **之一**）的路径：
 
-| Path | Match | Reason |
+| 路径 | 匹配 | 原因 |
 |------|:-----:|--------|
-| `/control-x86` | Yes | contains "control" + "x86" |
-| `/x86-control` | Yes | order doesn't matter |
-| `/control-amd64` | Yes | contains "control" + "amd64" |
-| `/control` | No | missing x86/amd/amd64 |
-| `/x86` | No | missing "control" |
-| `/control-arm` | No | "arm" is not in the OR group |
+| `/control-x86` | 是 | 包含 `control` 和 `x86` |
+| `/x86-control` | 是 | 关键词顺序不影响匹配 |
+| `/control-amd64` | 是 | 包含 `control` 和 `amd64` |
+| `/control` | 否 | 缺少 x86/amd/amd64 |
+| `/x86` | 否 | 缺少 `control` |
+| `/control-arm` | 否 | `arm` 不在 OR 分组中 |
 
-Rules are evaluated in array order; the **first matching rule wins**.
+规则按数组中的顺序依次计算，**第一个匹配的规则生效**。
 
-## Rules Format
+## 规则格式
 
-Rules are defined in `worker/src/rules.json` and bundled into the Worker at build time. Changes to `rules.json` require a push to `main` (CI/CD auto-redeploys since the workflow watches `match/**`).
+规则定义在 `worker/src/rules.json` 中，并在构建时打包进 Worker。更改 `rules.json` 后需要推送到 `main`（工作流会监听 `match/**`，因此 CI/CD 将自动重新部署）。
 
-Each rule has two supported download source types:
+每条规则支持以下两种下载源类型：
 
-### 1. `github_release` — Auto-resolve latest release asset
+### 1. `github_release`：自动解析最新的 Release 资源
 
 ```json
 {
@@ -67,20 +67,21 @@ Each rule has two supported download source types:
 }
 ```
 
-| Field | Description |
+| 字段 | 说明 |
 |-------|-------------|
-| `name` | Human-readable identifier (shown in rule listing at `/`) |
-| `keywords` | 2D array for matching the URL path (AND/OR semantics) |
-| `github_release.repo` | GitHub `owner/repo` to fetch latest release from |
-| `github_release.asset_keywords` | 2D array (same AND/OR semantics) for matching asset filenames within the release |
+| `name` | 易于理解的标识符（显示在 `/` 的规则列表中） |
+| `keywords` | 用于匹配 URL 路径的二维数组（AND/OR 语义） |
+| `github_release.repo` | 用于获取最新 Release 的 GitHub `owner/repo` |
+| `github_release.asset_keywords` | 用于匹配 Release 内资源文件名的二维数组（采用相同的 AND/OR 语义） |
 
-**Resolution flow:**
-1. Calls `GET /repos/{owner}/{repo}/releases/latest` via GitHub API
-2. Iterates through release assets, applying `asset_keywords` matching against each asset filename
-3. Downloads the first matching asset via the API asset endpoint (`Accept: application/octet-stream`)
-4. This approach works for both **public and private** repositories (uses `GITHUB_TOKEN` for authentication)
+**解析流程：**
 
-### 2. `url` — Static download URL
+1. 通过 GitHub API 调用 `GET /repos/{owner}/{repo}/releases/latest`
+2. 遍历 Release 资源，使用 `asset_keywords` 匹配每个资源的文件名
+3. 通过 API 资源端点下载第一个匹配的资源（`Accept: application/octet-stream`）
+4. 此方式同时适用于**公开和私有**仓库（使用 `GITHUB_TOKEN` 进行身份认证）
+
+### 2. `url`：静态下载 URL
 
 ```json
 {
@@ -90,27 +91,27 @@ Each rule has two supported download source types:
 }
 ```
 
-| Field | Description |
+| 字段 | 说明 |
 |-------|-------------|
-| `url` | Direct download URL (fetched as-is) |
+| `url` | 直接下载 URL（按原样获取） |
 
-Both types can be mixed in the same `rules.json`.
+两种类型可以在同一个 `rules.json` 中混合使用。
 
-## GitHub Release Resolution
+## GitHub Release 解析
 
-When a rule uses `github_release`, the Worker:
+规则使用 `github_release` 时，Worker 会：
 
-1. Fetches `https://api.github.com/repos/{repo}/releases/latest` with `GITHUB_TOKEN` for auth
-2. Scans the release's `assets` array for the first asset whose filename matches `asset_keywords`
-3. Downloads via `https://api.github.com/repos/{repo}/releases/assets/{asset_id}` with `Accept: application/octet-stream`
+1. 使用 `GITHUB_TOKEN` 进行身份认证，并获取 `https://api.github.com/repos/{repo}/releases/latest`
+2. 扫描 Release 的 `assets` 数组，查找第一个文件名与 `asset_keywords` 匹配的资源
+3. 携带 `Accept: application/octet-stream`，通过 `https://api.github.com/repos/{repo}/releases/assets/{asset_id}` 下载
 
-**Why not `browser_download_url`?** For private repositories, `browser_download_url` returns 404 even with an auth token. The API asset endpoint returns a signed redirect URL that works for both public and private repos.
+**为什么不使用 `browser_download_url`？** 对于私有仓库，即使提供了认证 Token，`browser_download_url` 仍会返回 404。API 资源端点会返回签名后的重定向 URL，同时适用于公开和私有仓库。
 
-**GitHub API rate limit:** Authenticated requests allow 5,000/hour. Each uncached request uses 2 API calls (1 for latest release, 1 for asset download). With 1-hour edge caching, actual API usage is minimal.
+**GitHub API 速率限制：** 经过身份认证的请求额度为每小时 5,000 次。每个未命中缓存的请求会使用 2 次 API 调用（1 次获取最新 Release，1 次下载资源）。由于边缘缓存时间为 1 小时，实际 API 用量很低。
 
-## Current Rules
+## 当前规则
 
-| Name | Keywords | Repo | Asset Match |
+| 名称 | 关键词 | 仓库 | 资源匹配条件 |
 |------|----------|------|-------------|
 | motion-control-x86-deb | control + (x86\|amd) | autonomous-group/motion_control | (x86\|x86_64\|amd64) + .deb |
 | motion-control-arm-deb | control + (arm\|aarch64) | autonomous-group/motion_control | (aarch64\|arm64) + .deb |
@@ -127,16 +128,16 @@ When a rule uses `github_release`, the Worker:
 | fake-pub-x86-deb | fake + (x86\|amd) | autonomous-group/fake_pub | (x86\|x86_64\|amd64) + .deb |
 | fake-pub-arm-deb | fake + (arm\|aarch64) | autonomous-group/fake_pub | (aarch64\|arm64) + .deb |
 
-## Caching
+## 缓存
 
-- **Edge cache TTL**: 1 hour (`s-maxage=3600`)
-- **Cache key**: `{origin}/{path}` (the full URL path as requested)
-- After a new release is published on GitHub, the cached version expires within 1 hour, after which the new version is served automatically
+- **边缘缓存 TTL**：1 小时（`s-maxage=3600`）
+- **缓存键**：`{origin}/{path}`（请求中的完整 URL 路径）
+- GitHub 发布新 Release 后，缓存版本会在 1 小时内过期，随后自动提供新版本
 
-## Adding a New Rule
+## 添加新规则
 
-1. Edit `match/worker/src/rules.json`
-2. Add a new rule object:
+1. 编辑 `match/worker/src/rules.json`
+2. 添加新的规则对象：
 
 ```json
 {
@@ -149,9 +150,10 @@ When a rule uses `github_release`, the Worker:
 }
 ```
 
-3. Push to `main` — CI/CD auto-deploys the updated Worker
+3. 推送到 `main`，CI/CD 会自动部署更新后的 Worker
 
-**Tips:**
-- Place more specific rules before less specific ones (first match wins)
-- `asset_keywords` uses the same AND/OR matching as `keywords` — use separate inner arrays for AND, group alternatives in the same inner array for OR
-- Include file extensions like `".deb"` in `asset_keywords` to distinguish between different package formats
+**提示：**
+
+- 将更具体的规则放在较宽泛的规则之前（第一个匹配的规则生效）
+- `asset_keywords` 与 `keywords` 使用相同的 AND/OR 匹配方式：需要 AND 时使用不同的内层数组，需要 OR 时将备选项放在同一个内层数组中
+- 在 `asset_keywords` 中加入 `".deb"` 等文件扩展名，以区分不同的软件包格式

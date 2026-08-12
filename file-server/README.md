@@ -1,33 +1,33 @@
 # file-server
 
-Path-based file server running on Cloudflare Workers. Serves files from this repository via `file.sshawn9.com/<name>` with automatic config value injection and fuzzy filename matching.
+运行在 Cloudflare Workers 上的路径式文件服务器。通过 `file.sshawn9.com/<name>` 提供本仓库中的文件，并支持自动注入配置值和模糊匹配文件名。
 
-## Usage
+## 使用方法
 
 ```bash
-# Exact match (name defined in routes.json)
+# 精确匹配（名称已在 routes.json 中定义）
 curl -fsSL https://file.sshawn9.com/iet | bash
 
-# Fuzzy match (searches files/ for a filename containing the input)
+# 模糊匹配（在 files/ 中搜索文件名包含输入内容的文件）
 curl -fsSL https://file.sshawn9.com/install-easytier | bash
 
-# Show usage info
+# 查看使用说明
 curl https://file.sshawn9.com/
 ```
 
-## Routing Logic
+## 路由逻辑
 
-The Worker resolves a `<name>` to a file using a two-layer fallback:
+Worker 使用两级回退机制将 `<name>` 解析为文件：
 
-1. **Exact match** — Looks up `<name>` in `routes.json`. If found, serves the mapped file directly.
-2. **Fuzzy match** — If no exact match, fetches the full directory tree of `file-server/files/` via the GitHub Trees API, and returns the first file whose filename **contains** `<name>` (case-insensitive).
-3. **404** — If neither match finds a file, returns `Not found: <name>`.
+1. **精确匹配**：在 `routes.json` 中查找 `<name>`；找到后直接返回映射的文件。
+2. **模糊匹配**：如果没有精确匹配，则通过 GitHub Trees API 获取 `file-server/files/` 的完整目录树，并返回第一个文件名中**包含** `<name>` 的文件（不区分大小写）。
+3. **404**：两种匹配均未找到文件时，返回 `Not found: <name>`。
 
-## Configuration
+## 配置
 
 ### routes.json
 
-Maps short names to file paths (relative to `file-server/files/`):
+将短名称映射到文件路径（相对于 `file-server/files/`）：
 
 ```json
 {
@@ -36,55 +36,55 @@ Maps short names to file paths (relative to `file-server/files/`):
 }
 ```
 
-- Keys are the URL path segments users will request
-- Values are relative paths within `file-server/files/`
-- This file is loaded dynamically from GitHub at runtime (changes take effect after cache expires, no redeployment needed)
+- 键是用户请求的 URL 路径段
+- 值是 `file-server/files/` 中的相对路径
+- 运行时会从 GitHub 动态加载此文件（缓存过期后更改即可生效，无需重新部署）
 
-### Config Injection
+### 配置注入
 
-Before serving a file, the Worker loads all `.conf` files from the `shared/` directory and replaces `{{KEY}}` placeholders in the file content with their corresponding values.
+返回文件前，Worker 会加载 `shared/` 目录中的所有 `.conf` 文件，并将文件内容中的 `{{KEY}}` 占位符替换为对应的值。
 
-**How it works:**
+**工作原理：**
 
-1. Worker lists all files in `shared/` via GitHub API
-2. Reads each `.conf` file (format: one `KEY=VALUE` per line)
-3. For every entry, replaces all occurrences of `{{KEY}}` in the served file with `VALUE`
+1. Worker 通过 GitHub API 列出 `shared/` 中的所有文件
+2. 读取每个 `.conf` 文件（格式：每行一个 `KEY=VALUE`）
+3. 对每个配置项，将待返回文件中的所有 `{{KEY}}` 替换为 `VALUE`
 
-**Example:**
+**示例：**
 
-`shared/dl-proxy.conf`:
+`shared/dl-proxy.conf`：
 ```
 DL_PROXY=https://dl.sshawn9.com
 DL_TOKEN=shawn326
 ```
 
-A served script containing `{{DL_PROXY}}` will have it replaced with `https://dl.sshawn9.com` at serve time.
+如果返回的脚本中包含 `{{DL_PROXY}}`，它会在响应时被替换为 `https://dl.sshawn9.com`。
 
-## Fuzzy Matching
+## 模糊匹配
 
-When no exact route is found, the Worker uses the GitHub Trees API (`GET /repos/{owner}/{repo}/git/trees/{branch}?recursive=1`) to fetch all file paths under `file-server/files/`. It then iterates through the tree and returns the first file whose **filename** (not full path) contains the requested `<name>` (case-insensitive).
+找不到精确路由时，Worker 使用 GitHub Trees API（`GET /repos/{owner}/{repo}/git/trees/{branch}?recursive=1`）获取 `file-server/files/` 下的所有文件路径。随后遍历目录树，返回第一个**文件名**（而非完整路径）中包含所请求 `<name>` 的文件（不区分大小写）。
 
-For example, requesting `/install-easytier` would match `scripts/install-easytier.sh` because the filename `install-easytier.sh` contains `install-easytier`.
+例如，请求 `/install-easytier` 会匹配 `scripts/install-easytier.sh`，因为文件名 `install-easytier.sh` 中包含 `install-easytier`。
 
-## Caching
+## 缓存
 
-- **Edge cache TTL**: 5 minutes (`s-maxage=300`)
-- **Cache key**: `{origin}/{name}` (full path-based, so different names have independent caches)
-- After pushing file or config changes, cached responses expire within 5 minutes
+- **边缘缓存 TTL**：5 分钟（`s-maxage=300`）
+- **缓存键**：`{origin}/{name}`（基于完整路径，因此不同名称使用独立缓存）
+- 推送文件或配置更改后，缓存的响应会在 5 分钟内过期
 
-## Adding a New File
+## 添加新文件
 
-1. Place your file in `file-server/files/` (any subdirectory structure is fine)
-2. **(Optional)** Add an entry to `routes.json` if you want a short alias (e.g., `"myalias": "path/to/file.sh"`)
-3. If you skip step 2, the file is still accessible via fuzzy matching (e.g., the filename itself)
-4. Use `{{KEY}}` placeholders in your file if you need config value injection
-5. Push to `main` — the file is available immediately (no Worker redeployment needed, subject to cache TTL)
+1. 将文件放入 `file-server/files/`（可使用任意子目录结构）
+2. **（可选）** 如需使用短别名，请在 `routes.json` 中添加条目（例如 `"myalias": "path/to/file.sh"`）
+3. 如果跳过第 2 步，仍可通过模糊匹配访问该文件（例如使用文件名本身）
+4. 如需注入配置值，请在文件中使用 `{{KEY}}` 占位符
+5. 推送到 `main` 后文件即可使用（无需重新部署 Worker，但受缓存 TTL 影响）
 
-**Note:** Only changes to `file-server/worker/**` trigger a Worker redeployment. Changes to `files/`, `routes.json`, or `shared/*.conf` take effect on the next uncached request since these are fetched from GitHub at runtime.
+**注意：** 只有对 `file-server/worker/**` 的更改才会触发 Worker 重新部署。`files/`、`routes.json` 或 `shared/*.conf` 均在运行时从 GitHub 获取，因此相关更改会在下一次未命中缓存的请求中生效。
 
-## File Inventory
+## 文件清单
 
-| Route | File Path | Description |
+| 路由 | 文件路径 | 说明 |
 |-------|-----------|-------------|
-| `/iet` | `scripts/install-easytier.sh` | EasyTier VPN client installer — downloads binary, sets up systemd service, configures machine ID |
-| `/deploy-easytier-web` | `scripts/deploy-easytier-web.sh` | EasyTier web dashboard deployment — installs binary, GeoIP DB, systemd service, Cloudflare origin rules, firewall |
+| `/iet` | `scripts/install-easytier.sh` | EasyTier VPN 客户端安装程序：下载二进制文件、设置 systemd 服务并配置机器 ID |
+| `/deploy-easytier-web` | `scripts/deploy-easytier-web.sh` | EasyTier Web 面板部署脚本：安装二进制文件、GeoIP 数据库、systemd 服务、Cloudflare Origin Rules 和防火墙 |
