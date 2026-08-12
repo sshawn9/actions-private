@@ -20,17 +20,18 @@ Infrastructure-as-code repository for the **sshawn9.com** domain ecosystem, powe
         (files + config        (latest asset)     External Domains
           injection)                                (with auth)
 
-  DNS, Redirect Rules, Origin Rules, and zone settings managed by Terraform (cf-dns/)
+  DNS, redirects, zone settings, and stable custom domains managed by Terraform (cf-dns/)
 ```
 
 ## Services
 
 | Service | Domain | Purpose | Directory |
 |---------|--------|---------|-----------|
+| **website** | `sshawn9.com` | Stable custom domain for the production `sshawn9-com` Worker; preview versions remain isolated on `sshawn9-com-preview` | `cf-dns/` |
 | **file-server** | `file.sshawn9.com/<name>` | Path-based file server with config injection and fuzzy matching | `file-server/` |
 | **match** | `match.sshawn9.com/<keywords>` | Keyword-matching download router, auto-resolves latest GitHub release assets | `match/` |
 | **dl-proxy** | `dl.sshawn9.com/<domain>/<path>?token=xxx` | Authenticated download proxy for whitelisted domains | `dl-proxy/` |
-| **cf-dns** | N/A | Terraform-managed DNS, Redirect Rules, Origin Rules, and SSL/TLS settings | `cf-dns/` |
+| **cf-dns** | N/A | Terraform-managed DNS, redirects, Worker custom domains, and zone settings | `cf-dns/` |
 
 ## Tech Stack
 
@@ -61,6 +62,7 @@ actions-private/
 ├── cf-dns/               # Terraform DNS management
 │   ├── terraform.tfvars  #   Cloudflare zone ID
 │   ├── backend.tf        #   R2 remote-state backend
+│   ├── site-worker.tf    #   Production website custom domain
 │   └── *.tf              #   Explicit Terraform resources
 ├── shared/               # Shared configuration files
 │   └── *.conf            #   KEY=VALUE files for template injection
@@ -107,7 +109,7 @@ Current config files:
 ## Adding a New Service
 
 1. Create a directory: `<service>/worker/` with `src/index.ts`, `wrangler.toml`, `package.json`, `tsconfig.json`
-2. Configure `wrangler.toml` with a `custom_domain` (Cloudflare auto-manages DNS for Worker custom domains)
+2. Add stable custom domains to `cf-dns/`; keep Worker code and version deployment in the service repository
 3. Add a GitHub Actions workflow at `.github/workflows/<service>.yml` (copy an existing one as template)
 4. Push to `main` — the workflow deploys automatically
 5. Set Worker secrets if needed: the workflow should include a step to inject `GITHUB_TOKEN`

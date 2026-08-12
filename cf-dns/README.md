@@ -20,8 +20,9 @@ makes Terraform state addresses correspond directly to Cloudflare resources.
 originless hostnames. Because the record is proxied, the Single Redirect rule
 runs at Cloudflare's edge and no connection is made to that address.
 
-Worker custom domains such as `file.sshawn9.com`, `match.sshawn9.com`, and
-`dl.sshawn9.com` are created and managed by Cloudflare Workers, not Terraform.
+The website custom domain `sshawn9.com` is managed by Terraform. Service-owned
+custom domains such as `file.sshawn9.com`, `match.sshawn9.com`, and
+`dl.sshawn9.com` remain in their respective Worker deployment configurations.
 
 ### Single Redirects
 
@@ -60,6 +61,7 @@ requires compatible TLS certificates on every affected origin.
 | `terraform.tfvars` | The zone ID only |
 | `dns.tf` | Explicit DNS record resources |
 | `rules.tf` | Ordered Origin Rules and Single Redirects rulesets |
+| `site-worker.tf` | Production website custom domain and its one-time import |
 | `zone.tf` | Individual zone settings |
 | `migrations.tf` | State-preserving provider v4 to v5 migration declarations |
 
@@ -80,6 +82,7 @@ from `CLOUDFLARE_API_TOKEN`. It needs:
 - Zone Settings Edit
 - Zone Origin Rules Edit
 - Zone Single Redirect Edit
+- Account Workers Scripts Edit (called `Workers Scripts Write` by the API)
 - R2 Object Read and Write, scoped to the Terraform state bucket when possible
 
 The workflow discovers the account through the Accounts API and retrieves the
@@ -142,6 +145,20 @@ The provider v5 migration deliberately removes the legacy aggregate
 `cloudflare_zone_settings_override.ssl` address from local state. On the first
 authenticated plan/apply, `migrations.tf` imports the existing `ssl` setting as
 `cloudflare_zone_setting.ssl`; it does not recreate or reset the remote value.
+
+## One-time website custom-domain adoption
+
+`site-worker.tf` initially looks up the existing `sshawn9.com` custom domain
+and imports it into `cloudflare_workers_custom_domain.site`. Apply this
+configuration while the existing custom-domain mapping is still live, and
+verify that the saved plan does not replace or detach it. Only after that apply
+succeeds should the website repository deploy a Wrangler configuration without
+the custom-domain route.
+
+The data source, derived domain ID, and `import` block are migration scaffolding.
+After the imported resource is visible in remote state and a subsequent plan is
+empty, remove those three blocks in a follow-up change while retaining the
+`cloudflare_workers_custom_domain.site` resource.
 
 ## Local workflow after migration
 
