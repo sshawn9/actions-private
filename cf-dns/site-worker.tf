@@ -1,11 +1,13 @@
 locals {
-  site_hostname    = "sshawn9.com"
-  site_worker_name = "sshawn9-com"
+  site_hostname              = "sshawn9.com"
+  site_worker_name           = "sshawn9-com"
+  site_preview_worker_name   = "sshawn9-com-preview"
+  workers_dev_account_domain = "regiprotonregi.workers.dev"
 }
 
 # Only the production Worker owns the stable custom domain. The separate
-# sshawn9-com-preview Worker is created by the site deployment workflow and is
-# intentionally reachable only through Cloudflare Preview URLs.
+# sshawn9-com-preview Worker and both Workers' version URLs are protected by
+# the Access application declared in site-access.tf.
 
 data "cloudflare_workers_custom_domains" "site" {
   account_id = var.account_id

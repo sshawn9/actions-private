@@ -24,6 +24,20 @@ The website custom domain `sshawn9.com` is managed by Terraform. Service-owned
 custom domains such as `file.sshawn9.com`, `match.sshawn9.com`, and
 `dl.sshawn9.com` remain in their respective Worker deployment configurations.
 
+### Website preview access
+
+The production custom domain `sshawn9.com` remains public. Cloudflare Access
+protects every non-production website endpoint:
+
+- Version previews of the production `sshawn9-com` Worker.
+- The stable `sshawn9-com-preview` workers.dev endpoint.
+- Branch aliases and immutable versions of `sshawn9-com-preview`.
+
+The Access policy allows accepted members of this Cloudflare account, uses a
+24-hour session, and does not expose the application in the Access launcher.
+The destination patterns include the Worker name, so they do not affect other
+Workers in the same account.
+
 ### Single Redirects
 
 `www.sshawn9.com` permanently redirects to `https://sshawn9.com` with:
@@ -61,6 +75,7 @@ requires compatible TLS certificates on every affected origin.
 | `terraform.tfvars` | The zone ID only |
 | `dns.tf` | Explicit DNS record resources |
 | `rules.tf` | Ordered Origin Rules and Single Redirects rulesets |
+| `site-access.tf` | Access application and reusable policy for website previews |
 | `site-worker.tf` | Production website custom domain and its one-time import |
 | `zone.tf` | Individual zone settings |
 | `migrations.tf` | State-preserving provider v4 to v5 migration declarations |
@@ -83,6 +98,8 @@ from `CLOUDFLARE_API_TOKEN`. It needs:
 - Zone Origin Rules Edit
 - Zone Single Redirect Edit
 - Account Workers Scripts Edit (called `Workers Scripts Write` by the API)
+- Access: Apps and Policies Edit (called `Access: Apps and Policies Write` by
+  the API)
 - R2 Object Read and Write, scoped to the Terraform state bucket when possible
 
 The workflow discovers the account through the Accounts API and retrieves the
@@ -174,6 +191,7 @@ terraform validate
 terraform plan
 ```
 
-Do not create or edit DNS records, zone settings, Origin Rules, or Single
-Redirects in the Cloudflare dashboard. Import any existing resource before
-adding it to this configuration so Terraform remains its sole owner.
+Do not create or edit DNS records, zone settings, Origin Rules, Single
+Redirects, or the website preview Access application in the Cloudflare
+dashboard. Import any existing resource before adding it to this configuration
+so Terraform remains its sole owner.
