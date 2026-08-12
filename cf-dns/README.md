@@ -33,10 +33,12 @@ protects every non-production website endpoint:
 - The stable `sshawn9-com-preview` workers.dev endpoint.
 - Branch aliases and immutable versions of `sshawn9-com-preview`.
 
-The Access policy allows accepted members of this Cloudflare account, uses a
-24-hour session, and does not expose the application in the Access launcher.
-The destination patterns include the Worker name, so they do not affect other
-Workers in the same account.
+The application uses a Terraform-managed Cloudflare account identity provider,
+skips the identity-provider selector, and does not fall back to email one-time
+PIN authentication. The Access policy allows accepted members of this
+Cloudflare account, uses a 24-hour session, and does not expose the application
+in the Access launcher. The destination patterns include the Worker name, so
+they do not affect other Workers in the same account.
 
 ### Single Redirects
 
@@ -100,6 +102,8 @@ from `CLOUDFLARE_API_TOKEN`. It needs:
 - Account Workers Scripts Edit (called `Workers Scripts Write` by the API)
 - Access: Apps and Policies Edit (called `Access: Apps and Policies Write` by
   the API)
+- Access: Organizations, Identity Providers, and Groups Edit (called `Access:
+  Organizations, Identity Providers, and Groups Write` by the API)
 - R2 Object Read and Write, scoped to the Terraform state bucket when possible
 
 The workflow discovers the account through the Accounts API and retrieves the
