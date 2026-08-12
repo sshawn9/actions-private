@@ -122,7 +122,10 @@ Configure this Actions secret:
 
 Pull requests run formatting, validation, and plan. Pushes to `main` run the
 same checks and apply the saved plan. Workflow concurrency serializes all
-operations for this state.
+operations for this state. GitHub Actions caches Provider binaries by operating
+system, architecture, and `.terraform.lock.hcl` content. Terraform also retries
+safe registry connection and server errors, reducing failures caused by
+temporary upstream outages without changing the locked Provider version.
 
 ## One-time remote-state migration
 
