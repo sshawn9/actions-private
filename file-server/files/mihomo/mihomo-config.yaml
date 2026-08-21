@@ -26,17 +26,17 @@ proxy-providers:
   ktm:
     <<: *sub-provider-common
     path: ./proxy-providers/ktm.yaml
-    url: "https://kutumu.cc/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
+    url: "https://kutumu.one/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
     proxy: DIRECT
     override:
       additional-prefix: "ktm |"
-  ktm2:
-    <<: *sub-provider-common
-    path: ./proxy-providers/ktm2.yaml
-    url: "https://ktm001.one/api/v1/client/subscribe?token=e080765b250cf73d2b2cf8d94a36549f"
-    proxy: DIRECT
-    override:
-      additional-prefix: "ktm2 |"
+  # ktm2:
+  #   <<: *sub-provider-common
+  #   path: ./proxy-providers/ktm2.yaml
+  #   url: "https://ktm001.one/api/v1/client/subscribe?token=e080765b250cf73d2b2cf8d94a36549f"
+  #   proxy: DIRECT
+  #   override:
+  #     additional-prefix: "ktm2 |"
   one:
     <<: *sub-provider-common
     path: ./proxy-providers/one.yaml
