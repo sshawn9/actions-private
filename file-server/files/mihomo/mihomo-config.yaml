@@ -30,6 +30,15 @@ proxy-providers:
     proxy: DIRECT
     override:
       additional-prefix: "ktm |"
+
+  jinlin:
+    <<: *sub-provider-common
+    path: ./proxy-providers/jinlin.yaml
+    url: "https://api2.riolu01.link/RioLU/system/api/v1/client/subscribe?token=f762459d32affd355f02be1c1f6482dc"
+    proxy: DIRECT
+    override:
+      additional-prefix: "lin |"
+      
   # ktm2:
   #   <<: *sub-provider-common
   #   path: ./proxy-providers/ktm2.yaml
