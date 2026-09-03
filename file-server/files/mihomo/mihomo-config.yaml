@@ -31,13 +31,13 @@ proxy-providers:
     override:
       additional-prefix: "ktm |"
 
-  jinlin:
+  blue:
     <<: *sub-provider-common
-    path: ./proxy-providers/jinlin.yaml
-    url: "https://api2.riolu01.link/RioLU/system/api/v1/client/subscribe?token=f762459d32affd355f02be1c1f6482dc"
+    path: ./proxy-providers/blue.yaml
+    url: "https://8.217.0.49/api/v1/stores/ab2e5l1/orders/2026090309045456676027404215"
     proxy: DIRECT
     override:
-      additional-prefix: "lin |"
+      additional-prefix: "blue |"
       
   # ktm2:
   #   <<: *sub-provider-common
