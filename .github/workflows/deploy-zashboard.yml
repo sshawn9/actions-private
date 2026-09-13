@@ -1,0 +1,132 @@
+name: Deploy zashboard
+run-name: Deploy zashboard ${{ inputs.version || 'latest' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag (for example v3.26.0), or latest"
+        required: false
+        type: string
+        default: "latest"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-zashboard
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy release to Cloudflare Workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: zashboard/worker
+    steps:
+      - name: Check out deployment configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "lts/*"
+          check-latest: true
+
+      - name: Check deployment token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "::error::Configure the existing CLOUDFLARE_API_TOKEN repository secret. See zashboard/README.md."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Download release site
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPOSITORY: Zephyruso/zashboard
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          version="${REQUESTED_VERSION:-latest}"
+          if [[ "$version" == "latest" ]]; then
+            endpoint="repos/$UPSTREAM_REPOSITORY/releases/latest"
+          else
+            encoded_tag="$(jq -rn --arg tag "$version" '$tag | @uri')"
+            endpoint="repos/$UPSTREAM_REPOSITORY/releases/tags/$encoded_tag"
+          fi
+
+          if ! release="$(gh api "$endpoint")"; then
+            echo "::error::Cannot resolve the release. Use latest or an existing release tag from $UPSTREAM_REPOSITORY."
+            exit 1
+          fi
+          tag="$(jq -er '.tag_name' <<< "$release")"
+          release_url="$(jq -er '.html_url' <<< "$release")"
+          if ! asset_url="$(jq -er '.assets[] | select(.name == "dist.zip") | .browser_download_url' <<< "$release")"; then
+            echo "::error::The selected release does not contain dist.zip."
+            exit 1
+          fi
+
+          release_dir="$(mktemp -d "$RUNNER_TEMP/zashboard.XXXXXX")"
+          archive="$release_dir/dist.zip"
+          curl --fail --location --silent --show-error --retry 3 \
+            --connect-timeout 15 --max-time 180 \
+            --output "$archive" "$asset_url"
+
+          # Older releases may not expose an asset digest in the GitHub API.
+          digest="$(jq -r '.assets[] | select(.name == "dist.zip") | .digest // empty' <<< "$release")"
+          if [[ "$digest" == sha256:* ]]; then
+            printf '%s  %s\n' "${digest#sha256:}" "$archive" | sha256sum --check
+          fi
+          checksum="$(sha256sum "$archive" | cut -d ' ' -f 1)"
+
+          # Upstream packages the site with: zip -r dist.zip dist
+          unzip -q "$archive" -d "$release_dir/site"
+          site_dir="$release_dir/site/dist"
+          if [[ ! -s "$site_dir/index.html" ]]; then
+            echo "::error::dist.zip does not contain a non-empty dist/index.html."
+            exit 1
+          fi
+
+          printf 'tag=%s\nurl=%s\npath=%s\nsha256=%s\n' \
+            "$tag" "$release_url" "$site_dir" "$checksum" >> "$GITHUB_OUTPUT"
+          printf 'Prepared zashboard %s from %s\n' "$tag" "$release_url"
+
+      - name: Validate deployment package
+        env:
+          ASSET_DIRECTORY: ${{ steps.release.outputs.path }}
+        run: npx wrangler deploy --assets "$ASSET_DIRECTORY" --dry-run
+
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ASSET_DIRECTORY: ${{ steps.release.outputs.path }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: npx wrangler deploy --assets "$ASSET_DIRECTORY" --message "zashboard $RELEASE_TAG"
+
+      - name: Write deployment summary
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+          RELEASE_SHA256: ${{ steps.release.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          {
+            printf '### zashboard deployed\n\n'
+            printf -- '- Release: [%s](%s)\n' "$RELEASE_TAG" "$RELEASE_URL"
+            printf -- '- Asset: dist.zip (includes fonts)\n'
+            printf -- '- SHA-256: %s\n' "$RELEASE_SHA256"
+            printf -- '- Website: https://zashboard.sshawn9.com\n'
+          } >> "$GITHUB_STEP_SUMMARY"

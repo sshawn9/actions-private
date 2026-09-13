@@ -20,8 +20,8 @@
         （文件与配置注入）       （最新资源）          外部域名
                                                      （需认证）
 
-  DNS、重定向、区域设置、稳定自定义域名及网站预览的 Access 策略
-  均由 Terraform 管理（cf-dns/）
+  DNS、重定向、区域设置、主站自定义域名及网站预览的 Access 策略
+  由 Terraform 管理（cf-dns/）；服务自定义域名由各自 Wrangler 配置管理
 ```
 
 ## 服务
@@ -32,6 +32,7 @@
 | **file-server** | `file.sshawn9.com/<name>` | 支持配置注入和模糊匹配的路径式文件服务器 | `file-server/` |
 | **match** | `match.sshawn9.com/<keywords>` | 基于关键词匹配的下载路由器，可自动解析最新的 GitHub Release 资源 | `match/` |
 | **dl-proxy** | `dl.sshawn9.com/<domain>/<path>?token=xxx` | 面向白名单域名、需要认证的下载代理 | `dl-proxy/` |
+| **zashboard** | `zashboard.sshawn9.com` | 手动部署最新或指定 release 的静态面板 | `zashboard/` |
 | **cf-dns** | 不适用 | 由 Terraform 管理的 DNS、重定向、Worker 自定义域名、网站预览访问策略和区域设置 | `cf-dns/` |
 
 ## 技术栈
@@ -39,8 +40,8 @@
 - **运行时**：Cloudflare Workers（TypeScript）
 - **构建与部署**：Wrangler v4
 - **DNS 与基础设施**：Terraform、Cloudflare Provider v5.23.0 及 R2 远程状态
-- **CI/CD**：GitHub Actions（推送到 `main` 时自动部署）
-- **Node.js**：v24
+- **CI/CD**：GitHub Actions（服务按路径自动部署；zashboard 手动选择 release）
+- **Node.js**：v24；zashboard 部署使用最新 LTS
 
 ## 目录结构
 
@@ -60,6 +61,9 @@ actions-private/
 │       └── src/
 │           ├── index.ts  #   Worker 逻辑
 │           └── config.ts #   Token 与域名白名单
+├── zashboard/            # 上游 release 静态面板部署
+│   ├── README.md         #   使用与回退说明
+│   └── worker/           #   Wrangler 配置与部署依赖
 ├── cf-dns/               # Terraform DNS 管理
 │   ├── terraform.tfvars  #   Cloudflare 区域 ID
 │   ├── backend.tf        #   R2 远程状态后端
@@ -72,18 +76,20 @@ actions-private/
     ├── file-server.yml
     ├── match.yml
     ├── dl-proxy.yml
+    ├── deploy-zashboard.yml
     └── cf-dns.yml
 ```
 
 ## 部署
 
-相关更改推送到 `main` 分支后，所有服务都会自动部署：
+各服务的部署触发方式如下：
 
 | 服务 | 触发路径 | 部署方式 |
 |---------|-------------|---------------|
 | file-server | `file-server/worker/**` | `npx wrangler deploy` |
 | match | `match/**` | `npx wrangler deploy` |
 | dl-proxy | `dl-proxy/worker/**` | `npx wrangler deploy` |
+| zashboard | 仅手动运行 `Deploy zashboard` | 下载 release，校验并通过 Wrangler 部署静态资源；详见 [说明](zashboard/README.md) |
 | cf-dns | `cf-dns/**` | 在 Pull Request 中生成 plan；合并到 `main` 后使用 R2 远程状态串行执行 apply |
 
 所有工作流也支持通过 `workflow_dispatch` 手动触发。
@@ -96,6 +102,8 @@ actions-private/
 |--------|---------|---------|
 | `CLOUDFLARE_API_TOKEN` | 所有服务 | 账户所有的 `cfat_` Token，供 Workers、Terraform 和 R2 状态使用 |
 | `GH_PAT` | file-server、match、dl-proxy | GitHub Personal Access Token，以 Worker Secret `GITHUB_TOKEN` 注入，用于访问私有仓库 |
+
+`zashboard` 与其他 Worker 一样，由 Wrangler 使用同一个 Token 识别唯一账户并部署，无需新增 Secret。
 
 `cf-dns` 工作流会从账户所有的 Token 中获取 Cloudflare 账户 ID 和 R2 S3
 凭据。状态存储桶名称 `sshawn9-terraform-state` 固定配置在
@@ -111,8 +119,8 @@ actions-private/
 
 ## 添加新服务
 
-1. 创建 `<service>/worker/` 目录，并添加 `src/index.ts`、`wrangler.toml`、`package.json` 和 `tsconfig.json`
-2. 在 `cf-dns/` 中添加稳定的自定义域名；Worker 代码和版本部署仍保留在服务仓库中
+1. 创建 `<service>/worker/` 目录，添加 Wrangler 配置和部署依赖；纯静态服务无需 Worker JS 或 TypeScript 配置
+2. 服务自定义域名由各自 Wrangler 配置管理；主站域名由 `cf-dns/` 管理，同一域名只指定一个管理者
 3. 在 `.github/workflows/<service>.yml` 中添加 GitHub Actions 工作流（可复制现有工作流作为模板）
-4. 推送到 `main`，工作流会自动部署
-5. 根据需要设置 Worker Secret；工作流中应包含注入 `GITHUB_TOKEN` 的步骤
+4. 根据服务需要选择按路径自动部署或手动部署
+5. 仅对需要运行时访问 GitHub 的服务注入 Worker Secret `GITHUB_TOKEN`

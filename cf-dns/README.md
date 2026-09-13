@@ -21,7 +21,8 @@
 与此地址建立连接。
 
 网站自定义域名 `sshawn9.com` 由 Terraform 管理。服务自行管理的自定义域名，
-例如 `file.sshawn9.com`、`match.sshawn9.com` 和 `dl.sshawn9.com`，仍保留在
+例如 `file.sshawn9.com`、`match.sshawn9.com`、`dl.sshawn9.com` 和
+`zashboard.sshawn9.com`，仍保留在
 各自的 Worker 部署配置中。
 
 ### 网站预览访问控制

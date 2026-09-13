@@ -1,0 +1,16 @@
+name = "zashboard"
+compatibility_date = "2026-09-13"
+workers_dev = false
+preview_urls = false
+
+# Wrangler owns this custom domain and its DNS record; do not duplicate it in cf-dns.
+routes = [
+  { pattern = "zashboard.sshawn9.com", custom_domain = true }
+]
+
+# A static-only Worker needs no main script or assets binding.
+# CI overrides this path with the extracted release directory via --assets.
+[assets]
+directory = "./dist"
+# zashboard uses hash routes; missing files should return a real 404.
+not_found_handling = "none"
