@@ -33,6 +33,7 @@
 | **match** | `match.sshawn9.com/<keywords>` | 基于关键词匹配的下载路由器，可自动解析最新的 GitHub Release 资源 | `match/` |
 | **dl-proxy** | `dl.sshawn9.com/<domain>/<path>?token=xxx` | 面向白名单域名、需要认证的下载代理 | `dl-proxy/` |
 | **zashboard** | `zashboard.sshawn9.com` | 手动部署最新或指定 release 的静态面板 | `zashboard/` |
+| **metacubexd** | `metacubexd.sshawn9.com` | 手动部署最新或指定 release 的 Mihomo 官方面板 | `metacubexd/` |
 | **cf-dns** | 不适用 | 由 Terraform 管理的 DNS、重定向、Worker 自定义域名、网站预览访问策略和区域设置 | `cf-dns/` |
 
 ## 技术栈
@@ -40,8 +41,8 @@
 - **运行时**：Cloudflare Workers（TypeScript）
 - **构建与部署**：Wrangler v4
 - **DNS 与基础设施**：Terraform、Cloudflare Provider v5.23.0 及 R2 远程状态
-- **CI/CD**：GitHub Actions（服务按路径自动部署；zashboard 手动选择 release）
-- **Node.js**：v24；zashboard 部署使用最新 LTS
+- **CI/CD**：GitHub Actions（服务按路径自动部署；zashboard、metacubexd 手动选择 release）
+- **Node.js**：v24；zashboard、metacubexd 部署使用最新 LTS
 
 ## 目录结构
 
@@ -64,6 +65,9 @@ actions-private/
 ├── zashboard/            # 上游 release 静态面板部署
 │   ├── README.md         #   使用与回退说明
 │   └── worker/           #   Wrangler 配置与部署依赖
+├── metacubexd/           # Mihomo 官方面板 release 部署
+│   ├── README.md         #   使用与回退说明
+│   └── worker/           #   Wrangler 配置与部署依赖
 ├── cf-dns/               # Terraform DNS 管理
 │   ├── terraform.tfvars  #   Cloudflare 区域 ID
 │   ├── backend.tf        #   R2 远程状态后端
@@ -77,6 +81,7 @@ actions-private/
     ├── match.yml
     ├── dl-proxy.yml
     ├── deploy-zashboard.yml
+    ├── deploy-metacubexd.yml
     └── cf-dns.yml
 ```
 
@@ -90,6 +95,7 @@ actions-private/
 | match | `match/**` | `npx wrangler deploy` |
 | dl-proxy | `dl-proxy/worker/**` | `npx wrangler deploy` |
 | zashboard | 仅手动运行 `Deploy zashboard` | 下载 release，校验并通过 Wrangler 部署静态资源；详见 [说明](zashboard/README.md) |
+| metacubexd | 仅手动运行 `Deploy metacubexd` | 下载 release，校验并通过 Wrangler 部署静态资源；详见 [说明](metacubexd/README.md) |
 | cf-dns | `cf-dns/**` | 在 Pull Request 中生成 plan；合并到 `main` 后使用 R2 远程状态串行执行 apply |
 
 所有工作流也支持通过 `workflow_dispatch` 手动触发。
@@ -103,7 +109,7 @@ actions-private/
 | `CLOUDFLARE_API_TOKEN` | 所有服务 | 账户所有的 `cfat_` Token，供 Workers、Terraform 和 R2 状态使用 |
 | `GH_PAT` | file-server、match、dl-proxy | GitHub Personal Access Token，以 Worker Secret `GITHUB_TOKEN` 注入，用于访问私有仓库 |
 
-`zashboard` 与其他 Worker 一样，由 Wrangler 使用同一个 Token 识别唯一账户并部署，无需新增 Secret。
+`zashboard`、`metacubexd` 与其他 Worker 一样，由 Wrangler 使用同一个 Token 识别唯一账户并部署，无需新增 Secret。
 
 `cf-dns` 工作流会从账户所有的 Token 中获取 Cloudflare 账户 ID 和 R2 S3
 凭据。状态存储桶名称 `sshawn9-terraform-state` 固定配置在
