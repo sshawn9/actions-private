@@ -225,6 +225,8 @@ proxy-groups:
     <<: *common-select
   - name: Telegram
     <<: *common-select
+  - name: Apple
+    <<: *common-select
 
 rule-anchor:
   ip: &ip       { type: http, interval: 86400, behavior: ipcidr, format: mrs, proxy: Proxy }
@@ -303,6 +305,10 @@ rule-providers:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/adobe.mrs"
     path: ./ruleset/adobe_domain.mrs
+  apple_domain:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
+    path: ./ruleset/apple_domain.mrs
   cn_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
@@ -341,6 +347,7 @@ rules:
   - RULE-SET,youtube_domain,YouTube
   - RULE-SET,google_domain,Google
   - RULE-SET,telegram_domain,Telegram
+  - RULE-SET,apple_domain,Apple
 
   # Bypass China Traffic
   - RULE-SET,cn_domain,DIRECT
