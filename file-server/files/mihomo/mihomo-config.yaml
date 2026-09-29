@@ -224,193 +224,135 @@ def-common-select: &common-select
   include-all: true
 
 proxy-groups:
-  # Proxy
   - name: Proxy
     type: select
     include-all: true
-
-  # Vip
   - name: Vip
     type: select
     include-all: true
-
-  # Cheap
   - name: Cheap
     type: select
     include-all: true
-
-  # AI
+  - name: Match
+    <<: *common-select
+  - name: Shawn
+    <<: *common-select
   - name: AI
     <<: *common-select
-
-  # Google
   - name: Google
     <<: *common-select
-
-  # Github
   - name: GitHub
     <<: *common-select
-
-  # Docker
   - name: Docker
     <<: *common-select
-
-  # Youtube
   - name: YouTube
     <<: *common-select
-
-  # Twitter
   - name: Twitter
     <<: *common-select
-
-  # Telegram
   - name: Telegram
     <<: *common-select
 
-  # Adobe
-  - name: Adobe
-    <<: *common-select
-
-
-# -------------------------------------------------------------------------
-# Rules based on Rule-Provider
 rule-anchor:
   ip: &ip       { type: http, interval: 86400, behavior: ipcidr, format: mrs, proxy: Proxy }
   domain: &domain { type: http, interval: 86400, behavior: domain, format: mrs, proxy: Proxy }
 rule-providers:
-  # = GEOIP,private
   private_ip:
     <<: *ip
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
     path: ./ruleset/private_ip.mrs
-
-  # = GEOIP,CN
   cn_ip:
     <<: *ip
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
     path: ./ruleset/cn_ip.mrs
-
-  # = GEOIP,google
   google_ip:
     <<: *ip
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"
     path: ./ruleset/google_ip.mrs
-
-  # = GEOIP,telegram
   telegram_ip:
     <<: *ip
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"
     path: ./ruleset/telegram_ip.mrs
-
-  # = GEOIP,twitter
   twitter_ip:
     <<: *ip
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/twitter.mrs"
     path: ./ruleset/twitter_ip.mrs
 
-  # = GEOSITE,PRIVATE
   private_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
     path: ./ruleset/private_domain.mrs
-
-  # = GEOSITE,openai
   openai_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"
     path: ./ruleset/openai_domain.mrs
-
-  # = GEOSITE,google-gemini
   gemini_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google-gemini.mrs"
     path: ./ruleset/gemini_domain.mrs
-
-  # = GEOSITE,anthropic
   anthropic_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/anthropic.mrs"
     path: ./ruleset/anthropic_domain.mrs
-
-  # = GEOSITE,category-ai-!cn
   ai_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"
     path: ./ruleset/ai_domain.mrs
-
-  # = GEOSITE,category-ai-chat-!cn
   ai_chat_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-chat-!cn.mrs"
     path: ./ruleset/ai_chat_domain.mrs
-
-  # = GEOSITE,github
   github_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"
     path: ./ruleset/github_domain.mrs
-
-  # = GEOSITE,docker
   docker_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/docker.mrs"
     path: ./ruleset/docker_domain.mrs
-
-  # = GEOSITE,twitter
   twitter_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitter.mrs"
     path: ./ruleset/twitter_domain.mrs
-
-  # = GEOSITE,youtube
   youtube_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
     path: ./ruleset/youtube_domain.mrs
-
-  # = GEOSITE,google
   google_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
     path: ./ruleset/google_domain.mrs
-
-  # = GEOSITE,telegram
   telegram_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"
     path: ./ruleset/telegram_domain.mrs
-
-  # = GEOSITE,adobe
   adobe_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/adobe.mrs"
     path: ./ruleset/adobe_domain.mrs
-
-  # = GEOSITE,CN
   cn_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
     path: ./ruleset/cn_domain.mrs
-
-  # = GEOSITE,gfw
   gfw_domain:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"
     path: ./ruleset/gfw_domain.mrs
-
-  # = GEOSITE,geolocation-!cn
   geolocation-!cn:
     <<: *domain
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
     path: ./ruleset/geolocation-!cn.mrs
+  connectivity_check:
+    <<: *domain
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/connectivity-check.mrs"
+    path: ./ruleset/connectivity_check.mrs
 
 rules:
+  # Custom Domains
+  - DOMAIN-SUFFIX,sshawn9.com,Shawn
+
   - RULE-SET,private_ip,DIRECT,no-resolve
   - RULE-SET,private_domain,DIRECT
   
-  - IP-CIDR,104.129.51.144/32,DIRECT
-  - DOMAIN-SUFFIX,sshawn9.com,DIRECT
-
   # AI Services
   - RULE-SET,openai_domain,AI
   - RULE-SET,gemini_domain,AI
@@ -425,14 +367,9 @@ rules:
   - RULE-SET,youtube_domain,YouTube
   - RULE-SET,google_domain,Google
   - RULE-SET,telegram_domain,Telegram
-  - RULE-SET,adobe_domain,Adobe
 
   # Bypass China Traffic
   - RULE-SET,cn_domain,DIRECT
-
-  # STUN/TURN Servers
-  # - DST-PORT,3478,DIRECT
-  # - DST-PORT,5349,DIRECT
 
   # GFW List
   - RULE-SET,gfw_domain,Proxy
@@ -442,8 +379,6 @@ rules:
   - RULE-SET,telegram_ip,Telegram,no-resolve
   - RULE-SET,twitter_ip,Twitter,no-resolve
 
-  - RULE-SET,cn_ip,DIRECT,no-resolve
+  - RULE-SET,cn_ip,DIRECT
 
-  - MATCH,Proxy
-
-# -------------------------------------------------------------------------
+  - MATCH,Match
