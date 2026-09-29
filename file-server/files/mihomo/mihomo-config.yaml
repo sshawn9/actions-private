@@ -178,21 +178,6 @@ dns:
     #   - https://cloudflare-dns.com/dns-query#RULES
     #   - https://dns.google/dns-query#RULES
 
-sniffer:
-  enable: true
-  force-dns-mapping: true
-  parse-pure-ip: true
-  override-destination: true
-  sniff:
-    HTTP:
-      ports: [80, 8080-8880]
-    TLS:
-      ports: [443, 8443]
-    QUIC:
-      ports: [443, 8443]
-  skip-domain:
-    - "+.apple.com"
-
 tun:
   enable: true
   stack: *tun-stack
@@ -211,6 +196,21 @@ tun:
     - 10.0.0.0/8
     - 172.16.0.0/12
     - 169.254.0.0/16
+
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  override-destination: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - "+.apple.com"
 
 
 def-common-select: &common-select
