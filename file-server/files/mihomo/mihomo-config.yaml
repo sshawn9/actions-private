@@ -1,23 +1,19 @@
-def-tun-stack: &tun-stack gvisor  # system/gvisor/mixed
-
 def-for-proxy-provider:
   speedtest: &speedtest
     url: "https://www.gstatic.com/generate_204"
     expected-status: 204
-    interval: 0 # check interval in seconds, set to 0 to disable auto check
+    interval: 86400 # check interval in seconds, set to 0 to disable auto check
     timeout: 5000 # timeout in milliseconds
     tolerance: 30 # only for url-test proxy groups
     lazy: true
 
   sub-provider-common: &sub-provider-common
     type: http
-    interval: 0 # update time in seconds, set to 0 to disable auto update
-    size-limit: 0
     header:
       User-Agent:
         - clash.meta
       Accept:
-        - "text/yaml,application/yaml,text/plain,*/*"
+        - "application/yaml,text/yaml,text/plain;q=0.9,*/*;q=0.1"
     health-check:
         enable: true
         <<: *speedtest
@@ -26,7 +22,8 @@ proxy-providers:
   ktm:
     <<: *sub-provider-common
     path: ./proxy-providers/ktm.yaml
-    url: "https://ktmcloud001.top/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
+    url: "http://134.175.54.55:33333/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
+    interval: 43200
     proxy: DIRECT
     override:
       additional-prefix: "ktm |"
@@ -46,156 +43,136 @@ proxy-providers:
     proxy: DIRECT
     override:
       additional-prefix: "fc |"
-      
-  # ktm2:
-  #   <<: *sub-provider-common
-  #   path: ./proxy-providers/ktm2.yaml
-  #   url: "https://ktm001.one/api/v1/client/subscribe?token=e080765b250cf73d2b2cf8d94a36549f"
-  #   proxy: DIRECT
-  #   override:
-  #     additional-prefix: "ktm2 |"
+
   one:
     <<: *sub-provider-common
     path: ./proxy-providers/one.yaml
     url: "https://sub1.smallstrawberry.com/api/v1/client/subscribe?token=d133994ffb2255365d1da23d0960525f"
+    interval: 43200
     proxy: DIRECT
     override:
       additional-prefix: "one |"
 
 
-# --------------------------------------------------------------
-# Common Global Settings
-mixed-port: 7890
 mode: rule
-log-level: warning # silent, error, warning, info, debug
-allow-lan: true
-bind-address: "*"
+log-level: info # silent, error, warning, info, debug
 ipv6: true
 find-process-mode: off
-unified-delay: true
-tcp-concurrent: true
-global-ua: clash.meta
-# global-ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
-etag-support: true
-authentication:
-  - "mihomo:mihomomo"
-skip-auth-prefixes:
-- 127.0.0.1/8
-- ::1/128
 
+mixed-port: 7890
+
+allow-lan: true
+bind-address: "*"
+
+tcp-concurrent: true
+unified-delay: true
 keep-alive-interval: 15
 keep-alive-idle: 15
-disable-keep-alive: false # set to true on mobile devices to save battery
+disable-keep-alive: false
+
+external-controller: "0.0.0.0:9090"
+secret: "mihomomo"
+external-controller-cors:
+  allow-origins: ["*"]
+  allow-private-network: true
+external-doh-server: "/dns-query"
 
 profile:
   store-selected: true
   store-fake-ip: true
-# --------------------------------------------------------------
-
-
-# --------------------------------------------------------------
-# Web Dashboard Settings
-external-controller: 0.0.0.0:9090
-external-ui: ui
-external-ui-url: "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip"
-
-external-controller-cors:
-  allow-origins:
-    - '*'
-  allow-private-network: true
-secret: "mihomomo"
-# --------------------------------------------------------------
-
-
-hosts:
-  'dns.google': 
-    - 8.8.8.8
-    - 8.8.4.4
-  'cloudflare-dns.com': 
-    - 1.1.1.1
-    - 1.0.0.1
 
 dns:
   enable: true
   listen: 0.0.0.0:1053
+
   ipv6: false
-
-  cache-algorithm: arc
-  prefer-h3: false
-
   use-hosts: true
   use-system-hosts: true
-  respect-rules: false
 
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-  fake-ip-filter-mode: blacklist
+  fake-ip-filter-mode: rule
   fake-ip-filter:
-    - '*.lan'
-    - '*.localdomain'
-    - '*.localhost'
-    - '*.local'
-    # - 'geosite:cn'
-    # - 'geosite:private'
-    - "rule-set:private_domain"
-    - 'msftconnecttest.com'
-    - 'msftncsi.com'
-    - 'xbox.*.microsoft.com'
-    - 'xbox.*.xboxlive.com'
-    - "stun.*"
-    - "*.stun.*"
-    - "turn.*"
-    - "*.turn.*"
-    - '104.129.51.144'
-    - 'sshawn9.com'
-    - '*.sshawn9.com'
+    - RULE-SET,connectivity_check,real-ip
+    - RULE-SET,private_domain,real-ip
+    - RULE-SET,cn_domain,real-ip
+    - 'DOMAIN-REGEX,^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$,real-ip'
+    - MATCH,fake-ip
 
+  cache-algorithm: arc
+  cache-max-size: 4096
+
+  prefer-h3: false
+  respect-rules: false
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-  proxy-server-nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
-  direct-nameserver:
-    - https://doh.pub/dns-query
-    - https://dns.alidns.com/dns-query
-  direct-nameserver-follow-policy: true
-  nameserver:
-    - https://cloudflare-dns.com/dns-query#RULES
-    - https://dns.google/dns-query#RULES
   nameserver-policy:
-    "+.arpa": system
     "rule-set:private_domain": system
     "rule-set:cn_domain":
-      - https://doh.pub/dns-query
-      - https://dns.alidns.com/dns-query
-    # "geosite:private": 
-    #   - system
-    # "geosite:cn":
-    #   - https://doh.pub/dns-query
-    #   - https://dns.alidns.com/dns-query
-    # "geosite:gfw,geolocation-!cn":
-    #   - https://cloudflare-dns.com/dns-query#RULES
-    #   - https://dns.google/dns-query#RULES
+      - system
+      - https://dns.alidns.com/dns-query#DIRECT
+      - https://doh.pub/dns-query#DIRECT
+    "rule-set:gfw_domain":
+      - "https://cloudflare-dns.com/dns-query#RULES"
+      - "https://dns.google/dns-query#RULES"
+    "rule-set:geolocation-!cn":
+      - "https://cloudflare-dns.com/dns-query#RULES"
+      - "https://dns.google/dns-query#RULES"
+  nameserver:
+    - "https://cloudflare-dns.com/dns-query#RULES"
+    - "https://dns.google/dns-query#RULES"
+  fallback:
+    - "https://dns.alidns.com/dns-query#DIRECT"
+    - "https://doh.pub/dns-query#DIRECT"
+  fallback-lazy-query: false
+  fallback-filter:
+    geoip: false
+    ipcidr: []
+    domain: []
+  proxy-server-nameserver:
+      - https://dns.alidns.com/dns-query#DIRECT
+      - https://doh.pub/dns-query#DIRECT
+  direct-nameserver:
+    - https://dns.alidns.com/dns-query#DIRECT
+    - https://doh.pub/dns-query#DIRECT
+  direct-nameserver-follow-policy: true
 
 tun:
   enable: true
-  stack: *tun-stack
+  stack: system
   auto-route: true
   auto-redirect: true
   auto-detect-interface: true
   strict-route: false
   dns-hijack:
     - any:53
-    - tcp://any:53
   gso: true
-  gso-max-size: 65536
-  endpoint-independent-nat: true
+  # include-interface:
+  #   - br-lan
+  route-exclude-address-set:
+    - cn_ip
   route-exclude-address:
-    - 192.168.0.0/16
+    - 0.0.0.0/8
     - 10.0.0.0/8
-    - 172.16.0.0/12
+    - 100.64.0.0/10
+    - 127.0.0.0/8
     - 169.254.0.0/16
+    - 172.16.0.0/12
+    - 192.0.0.0/24
+    - 192.0.2.0/24
+    - 192.88.99.0/24
+    - 192.168.0.0/16
+    - 198.19.0.0/16
+    - 198.51.100.0/24
+    - 203.0.113.0/24
+    # - 224.0.0.0/3
+    - 224.0.0.0/4
+    - ::/127
+    - fc00::/7
+    - fe80::/10
+    # - ff00::/8
+    - ff00::/9
 
 sniffer:
   enable: true
@@ -204,14 +181,11 @@ sniffer:
   override-destination: true
   sniff:
     HTTP:
-      ports: [80, 8080-8880]
+      ports: [80, 8080]
     TLS:
       ports: [443, 8443]
     QUIC:
-      ports: [443, 8443]
-  skip-domain:
-    - "+.apple.com"
-
+      ports: [443]
 
 def-common-select: &common-select
   type: select
