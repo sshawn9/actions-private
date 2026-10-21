@@ -28,14 +28,6 @@ proxy-providers:
     override:
       additional-prefix: "ktm |"
       
-  fcm:
-    <<: *sub-provider-common
-    path: ./proxy-providers/fcm.yaml
-    url: "https://api-huacloud.dev/sub?target=clash&insert=true&emoji=true&udp=true&clash.doh=true&new_name=true&filename=Flower_Trojan.yaml&url=https%3A%2F%2Fapi.xmancdn.com%2Fosubscribe.php%3Ftoken2%3Dy3mdempy-f48f474bd2mmrzts5lrf05"
-    proxy: DIRECT
-    override:
-      additional-prefix: "fcm |"
-      
   fc:
     <<: *sub-provider-common
     path: ./proxy-providers/fc.yaml
