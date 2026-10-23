@@ -1,0 +1,7 @@
+{
+  "name": "rendercv-web-deployment",
+  "private": true,
+  "devDependencies": {
+    "wrangler": "^4.152.0"
+  }
+}

@@ -1,0 +1,159 @@
+name: Deploy RenderCV Web
+run-name: Deploy RenderCV Web ${{ inputs.ref }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Source commit, tag or branch in sshawn9/rendercv-web"
+        required: true
+        type: string
+        default: "main"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-rendercv-web
+  cancel-in-progress: false
+
+env:
+  WRANGLER_SEND_METRICS: "false"
+  VITE_GITHUB_AUTH_URL: https://rendercv-auth.sshawn9.com
+  SITE_ORIGIN: https://rendercv.sshawn9.com
+
+jobs:
+  deploy:
+    name: Build, verify and deploy the website and OAuth Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: rendercv-web/worker
+    steps:
+      - name: Check out deployment configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check deployment settings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_OAUTH_CLIENT_ID: ${{ vars.RENDERCV_GITHUB_OAUTH_CLIENT_ID }}
+          GITHUB_OAUTH_CLIENT_SECRET: ${{ secrets.RENDERCV_GITHUB_OAUTH_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          for key in CLOUDFLARE_API_TOKEN GITHUB_OAUTH_CLIENT_ID GITHUB_OAUTH_CLIENT_SECRET; do
+            if [[ -z "${!key}" ]]; then
+              echo "::error::Missing $key. See rendercv-web/README.md for the corresponding Actions setting."
+              exit 1
+            fi
+          done
+
+      - name: Check out application source once
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: sshawn9/rendercv-web
+          ref: ${{ inputs.ref }}
+          path: rendercv-web/source
+          # The normal token suffices for public source. GH_PAT also permits private source.
+          token: ${{ secrets.GH_PAT || github.token }}
+          persist-credentials: false
+
+      - name: Record source revision
+        id: revision
+        run: printf 'sha=%s\n' "$(git -C ../source rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: rendercv-web/source/package-lock.json
+
+      - name: Install application dependencies and rendering assets
+        working-directory: rendercv-web/source
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: rendercv-web/source
+        run: npm test
+
+      - name: Build and check static asset limits
+        working-directory: rendercv-web/source
+        run: |
+          set -euo pipefail
+          npm run build
+          npm run check:assets
+
+      - name: Install browser for production verification
+        working-directory: rendercv-web/source
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify the built editor and real rendering
+        working-directory: rendercv-web/source
+        run: npm run test:production
+
+      - name: Install deployment dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate both deployment packages
+        env:
+          GITHUB_OAUTH_CLIENT_ID: ${{ vars.RENDERCV_GITHUB_OAUTH_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config auth.wrangler.toml --var "GITHUB_OAUTH_CLIENT_ID:$GITHUB_OAUTH_CLIENT_ID" --dry-run
+          npx wrangler deploy --config site.wrangler.toml --dry-run
+
+      - name: Deploy OAuth Worker and its secret together
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_OAUTH_CLIENT_ID: ${{ vars.RENDERCV_GITHUB_OAUTH_CLIENT_ID }}
+          GITHUB_OAUTH_CLIENT_SECRET: ${{ secrets.RENDERCV_GITHUB_OAUTH_CLIENT_SECRET }}
+          SOURCE_SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          secrets_file="$(mktemp "$RUNNER_TEMP/rendercv-auth.XXXXXX.json")"
+          trap 'rm -f "$secrets_file"' EXIT
+          node -e 'process.stdout.write(JSON.stringify({GITHUB_OAUTH_CLIENT_SECRET: process.env.GITHUB_OAUTH_CLIENT_SECRET}))' > "$secrets_file"
+          npx wrangler deploy --config auth.wrangler.toml \
+            --var "GITHUB_OAUTH_CLIENT_ID:$GITHUB_OAUTH_CLIENT_ID" \
+            --secrets-file "$secrets_file" --message "rendercv-web $SOURCE_SHA"
+
+      - name: Verify OAuth configuration before publishing the website
+        env:
+          GITHUB_OAUTH_CLIENT_ID: ${{ vars.RENDERCV_GITHUB_OAUTH_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          config_file="$RUNNER_TEMP/rendercv-auth-config.json"
+          curl --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 10 \
+            --retry-max-time 150 --connect-timeout 10 --max-time 20 \
+            --header "Origin: $SITE_ORIGIN" \
+            --output "$config_file" "$VITE_GITHUB_AUTH_URL/config"
+          node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (value.clientId !== process.env.GITHUB_OAUTH_CLIENT_ID) throw new Error("Deployed OAuth Client ID does not match");' "$config_file"
+
+      - name: Deploy static website
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SOURCE_SHA: ${{ steps.revision.outputs.sha }}
+        run: npx wrangler deploy --config site.wrangler.toml --message "rendercv-web $SOURCE_SHA"
+
+      - name: Verify website response
+        run: |
+          curl --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 10 \
+            --retry-max-time 150 --connect-timeout 10 --max-time 20 \
+            --output /dev/null "$SITE_ORIGIN/"
+
+      - name: Write deployment summary
+        env:
+          SOURCE_SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          {
+            printf '### RenderCV Web deployed\n\n'
+            printf -- '- Source: [%s](https://github.com/sshawn9/rendercv-web/commit/%s)\n' "$SOURCE_SHA" "$SOURCE_SHA"
+            printf -- '- Website: %s\n' "$SITE_ORIGIN"
+            printf -- '- OAuth service: %s\n' "$VITE_GITHUB_AUTH_URL"
+            printf -- '- Re-run this workflow with the source commit above to redeploy this revision.\n'
+          } >> "$GITHUB_STEP_SUMMARY"

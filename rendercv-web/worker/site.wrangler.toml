@@ -1,0 +1,15 @@
+name = "rendercv-web"
+compatibility_date = "2026-10-23"
+workers_dev = false
+preview_urls = false
+
+# Wrangler owns this domain and its DNS record; do not duplicate it in cf-dns.
+routes = [{ pattern = "rendercv.sshawn9.com", custom_domain = true }]
+
+[assets]
+directory = "../source/dist"
+# The editor lives at /. Missing runtime assets must return 404, not index.html.
+not_found_handling = "none"
+
+[observability]
+enabled = false
