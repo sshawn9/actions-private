@@ -92,8 +92,18 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Verify the built editor and real rendering
+        id: browser_tests
         working-directory: rendercv-web/source
         run: npm run test:production
+
+      - name: Upload failed browser diagnostics
+        if: ${{ failure() && steps.browser_tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rendercv-web-browser-failure
+          path: rendercv-web/source/test-results/
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Install deployment dependencies
         run: npm install --no-audit --no-fund
