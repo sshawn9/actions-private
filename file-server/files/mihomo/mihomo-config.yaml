@@ -144,27 +144,7 @@ tun:
   #   - br-lan
   route-exclude-address-set:
     - cn_ip
-  route-exclude-address:
-    - 0.0.0.0/8
-    - 10.0.0.0/8
-    - 100.64.0.0/10
-    - 127.0.0.0/8
-    - 169.254.0.0/16
-    - 172.16.0.0/12
-    - 192.0.0.0/24
-    - 192.0.2.0/24
-    - 192.88.99.0/24
-    - 192.168.0.0/16
-    - 198.19.0.0/16
-    - 198.51.100.0/24
-    - 203.0.113.0/24
-    # - 224.0.0.0/3
-    - 224.0.0.0/4
-    - ::/127
-    - fc00::/7
-    - fe80::/10
-    # - ff00::/8
-    - ff00::/9
+    - tun_bypass
 
 sniffer:
   enable: true
@@ -224,6 +204,30 @@ rule-anchor:
   ip: &ip       { type: http, interval: 86400, behavior: ipcidr, format: mrs, proxy: Proxy }
   domain: &domain { type: http, interval: 86400, behavior: domain, format: mrs, proxy: Proxy }
 rule-providers:
+  tun_bypass:
+    type: inline
+    behavior: ipcidr
+    payload:
+      - 0.0.0.0/8
+      - 10.0.0.0/8
+      - 100.64.0.0/10
+      - 127.0.0.0/8
+      - 169.254.0.0/16
+      - 172.16.0.0/12
+      - 192.0.0.0/24
+      - 192.0.2.0/24
+      - 192.88.99.0/24
+      - 192.168.0.0/16
+      - 198.19.0.0/16
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+      # - 224.0.0.0/3
+      - 224.0.0.0/4
+      - ::/127
+      - fc00::/7
+      - fe80::/10
+      # - ff00::/8
+      - ff00::/9
   private_ip:
     <<: *ip
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
