@@ -22,7 +22,7 @@ proxy-providers:
   ktm:
     <<: *sub-provider-common
     path: ./proxy-providers/ktm.yaml
-    url: "http://134.175.54.55:33333/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
+    url: "https://jingpinktm.cc/api/v1/client/subscribe?token=41197248aff32b927ce20ec8618eee18"
     interval: 43200
     proxy: DIRECT
     override:
