@@ -228,6 +228,7 @@ rule-providers:
       - fe80::/10
       # - ff00::/8
       - ff00::/9
+      - 43.165.186.95/32
   private_ip:
     <<: *ip
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
